@@ -1,0 +1,587 @@
+<title>편의점 단백질 조합 최적화</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: 팀원 브리프와 같은 탭 구조. 편의점 진열대(상품 카드)와 영수증을 시각 모티프로 사용 */
+:root {
+  --bg: #f5f7f6;
+  --paper: #ffffff;
+  --sunk: #eef2f0;
+  --ink: #18221d;
+  --muted: #5f6c66;
+  --line: #dde4e0;
+  --brand: #0f7a58;
+  --brand-soft: #e1f2ea;
+  --greedy: #c56a12;
+  --greedy-soft: #fbeedd;
+  --bad: #b8433a;
+  --bad-soft: #f8e4e2;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --paper: #19201c; --sunk: #141a17; --ink: #e5ece8; --muted: #9aa9a1; --line: #2b3530;
+    --brand: #4fc49b; --brand-soft: #173128; --greedy: #eba256; --greedy-soft: #35260f; --bad: #ec8178; --bad-soft: #3a1d1a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111614; --paper: #19201c; --sunk: #141a17; --ink: #e5ece8; --muted: #9aa9a1; --line: #2b3530;
+  --brand: #4fc49b; --brand-soft: #173128; --greedy: #eba256; --greedy-soft: #35260f; --bad: #ec8178; --bad-soft: #3a1d1a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); line-height: 1.65; font-size: 15px; }
+main { max-width: 940px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.3; }
+p { margin: 0; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--brand); }
+.mark { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; background: var(--paper); }
+h1 { font-size: clamp(27px, 4.4vw, 41px); letter-spacing: -.03em; margin: 18px 0 12px; }
+.lead { color: var(--muted); max-width: 720px; font-size: 16px; }
+.lead strong { color: var(--ink); }
+
+/* 영수증 띠 */
+.strip { margin: 24px 0 8px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; }
+.receipt { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; font-family: var(--font-mono); font-size: 13.5px; min-width: 0; position: relative; }
+.receipt::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 6px;
+  background: radial-gradient(circle at 6px 6px, var(--bg) 4px, transparent 4.5px) 0 0 / 12px 12px repeat-x; }
+.receipt .rh { font-family: var(--font-body); font-weight: 700; font-size: 13px; color: var(--muted); border-bottom: 1px dashed var(--line); padding-bottom: 7px; margin-bottom: 7px; }
+.ln { display: flex; justify-content: space-between; gap: 10px; }
+.ln.total { border-top: 1px dashed var(--line); margin-top: 7px; padding-top: 7px; font-weight: 600; }
+.strip .arrow { display: grid; place-items: center; color: var(--muted); font-size: 22px; }
+.strip .box { display: grid; place-items: center; text-align: center; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 12px 16px; font-weight: 700; font-size: 14px; }
+.strip .mid { display: grid; grid-template-rows: auto 1fr auto; gap: 6px; }
+@media (max-width: 640px) { .strip { grid-template-columns: 1fr; } .strip .arrow { transform: rotate(90deg); } }
+
+/* 탭 */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 26px; }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); padding: 12px 14px 11px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--brand); border-color: var(--brand); }
+.tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (max-width: 640px) { .tabs { display: grid; grid-template-columns: 1fr 1fr; } .tab { padding: 10px 6px; } }
+.panel { padding-top: 26px; }
+h2 { font-size: 22px; letter-spacing: -.02em; margin-bottom: 6px; }
+.sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.card .num { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--brand); }
+.card h3 { font-size: 16px; }
+.card p { font-size: 14px; color: var(--muted); }
+.callout { background: var(--brand-soft); border-left: 3px solid var(--brand); border-radius: 0 10px 10px 0; padding: 14px 16px; font-size: 14px; margin-top: 16px; }
+.callout.warn { background: var(--greedy-soft); border-color: var(--greedy); }
+.note { font-size: 12px; color: var(--muted); margin-top: 14px; }
+
+/* 수식 */
+.formula { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; font-family: var(--font-mono); font-size: 14px; line-height: 2; overflow-x: auto; margin-top: 16px; }
+.formula .c { color: var(--muted); font-family: var(--font-body); font-size: 12px; }
+
+/* 데모 */
+.controls { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 640px) { .controls { grid-template-columns: 1fr; gap: 12px; } }
+.ctl { display: grid; gap: 4px; min-width: 0; }
+.ctl label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; gap: 8px; }
+.ctl label output { color: var(--brand); font-family: var(--font-mono); }
+.ctl input[type=range] { width: 100%; accent-color: var(--brand); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 18px; align-items: center; }
+.presets span { font-size: 12px; color: var(--muted); margin-right: 4px; }
+.preset { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.preset:hover { border-color: var(--brand); }
+.preset:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.item { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; display: grid; gap: 2px; position: relative; min-width: 0; transition: border-color .15s, background .15s; }
+.item .nm { font-weight: 700; font-size: 13.5px; }
+.item .pr { font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+.item .nu { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.item.opt { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 1px var(--brand); }
+.item .badges { display: flex; gap: 4px; position: absolute; top: 8px; right: 8px; }
+.b { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+.b.o { background: var(--brand); color: var(--paper); }
+.b.g { background: var(--greedy); color: var(--paper); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 10px 0 18px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+.results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 720px) { .results { grid-template-columns: 1fr; } }
+.res { background: var(--paper); border: 1px solid var(--line); border-top: 4px solid var(--brand); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.res.greedy { border-top-color: var(--greedy); }
+.res h3 { font-size: 15px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.res h3 small { font-size: 11px; color: var(--muted); font-weight: 500; }
+.res .price { font-family: var(--font-mono); font-size: 26px; font-weight: 600; line-height: 1.1; }
+.res .what { font-size: 13px; color: var(--muted); }
+.res .meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.verdict { font-size: 12.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px; justify-self: start; }
+.verdict.ok { background: var(--brand-soft); color: var(--brand); }
+.verdict.gap { background: var(--greedy-soft); color: var(--greedy); }
+.verdict.fail { background: var(--bad-soft); color: var(--bad); }
+
+/* 알고리즘 설명 블록 */
+.explain { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 16px; display: grid; gap: 14px; }
+.ehead { display: flex; gap: 12px; align-items: center; }
+.enum { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; flex: none; background: var(--brand-soft); color: var(--brand); }
+.enum.g { background: var(--greedy-soft); color: var(--greedy); }
+.ehead h3 { font-size: 18px; }
+.ehead p { font-size: 13px; color: var(--muted); }
+.visual { background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.vlabel { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+.efoot { font-size: 13.5px; color: var(--muted); }
+.efoot strong { color: var(--ink); }
+
+/* 그리디 막대 */
+.rank { display: grid; gap: 6px; }
+.rrow { display: grid; grid-template-columns: 92px 1fr 72px; gap: 10px; align-items: center; font-size: 12.5px; }
+.rrow .bar { height: 14px; border-radius: 4px; background: var(--line); position: relative; overflow: hidden; }
+.rrow .bar span { position: absolute; inset: 0 auto 0 0; background: var(--greedy); border-radius: 4px; }
+.rrow .v { font-family: var(--font-mono); text-align: right; color: var(--muted); }
+.story { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+@media (max-width: 640px) { .story { grid-template-columns: 1fr; } }
+.story div { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; display: grid; gap: 2px; }
+.story b { font-size: 11px; color: var(--greedy); letter-spacing: .04em; }
+
+/* DP 표 */
+.tablewrap { overflow-x: auto; }
+table.dp { border-collapse: separate; border-spacing: 3px; font-family: var(--font-mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+table.dp th { font-weight: 500; color: var(--muted); padding: 2px 4px; white-space: nowrap; }
+table.dp td { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 6px 4px; text-align: center; min-width: 54px; }
+table.dp td.empty { color: var(--muted); opacity: .55; }
+table.dp td.goal { background: var(--brand-soft); border-color: var(--brand); }
+table.dp td.best { background: var(--brand); color: var(--paper); border-color: var(--brand); font-weight: 600; }
+
+/* B&B 트리 */
+.tree svg { width: 100%; height: auto; display: block; }
+.tree text { font-family: var(--font-body); font-size: 12px; fill: var(--ink); }
+.tree .sm { font-size: 10.5px; fill: var(--muted); }
+.tree .edge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.tree .edge.cut { stroke-dasharray: 4 4; opacity: .6; }
+.tree .node { fill: var(--paper); stroke: var(--line); stroke-width: 1.4; }
+.tree .node.live { stroke: var(--brand); }
+.tree .node.dead { fill: var(--bad-soft); stroke: var(--bad); }
+.tree .node.ans { fill: var(--brand); stroke: var(--brand); }
+.tree .ans-t { fill: var(--paper); font-weight: 700; }
+.tree .x { stroke: var(--bad); stroke-width: 2.2; }
+
+.counter { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.counter div { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; }
+.counter strong { font-family: var(--font-mono); font-size: 22px; }
+.counter small { font-size: 12px; color: var(--muted); }
+
+.compare { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 13.5px; }
+.compare th, .compare td { padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.compare th { background: var(--sunk); font-size: 12px; color: var(--muted); }
+.compare tr:last-child td { border-bottom: 0; }
+
+/* 진행 계획 */
+.steps { display: grid; gap: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 4px 18px; }
+.step { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.step:last-child { border-bottom: 0; }
+.circle { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; font-weight: 700; font-size: 13px; background: var(--brand-soft); color: var(--brand); }
+.step h3 { font-size: 15px; }
+.step p { font-size: 13.5px; color: var(--muted); }
+.qs { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; }
+.tag { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; vertical-align: 2px; margin-left: 6px; }
+.tag.fix { background: var(--brand-soft); color: var(--brand); }
+.tag.prop { background: var(--greedy-soft); color: var(--greedy); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+  <div class="top"><span class="eyebrow">ALGORITHM TEAM PROJECT · IDEA BRIEF</span><span class="mark">아이디어 공유 · v1</span></div>
+  <h1>단백질은 채우고,<br>지갑은 덜 비우는 편의점 조합</h1>
+  <p class="lead">운동하는 대학생이 <strong>단백질 최소량</strong>과 <strong>칼로리 범위</strong>를 입력하면, CU에서 파는 상품 중 조건을 만족하면서 <strong>총 가격이 가장 싼 조합</strong>을 찾아줍니다. 같은 문제를 알고리즘 세 개로 풀고 성능을 비교하는 프로젝트예요.</p>
+
+  <div class="strip" aria-label="입력에서 출력까지">
+    <div class="receipt">
+      <div class="rh">입력 · 사용자 조건</div>
+      <div class="ln"><span>단백질</span><span>40g 이상</span></div>
+      <div class="ln"><span>칼로리</span><span>400~700kcal</span></div>
+      <div class="ln"><span>같은 상품</span><span>최대 1개</span></div>
+    </div>
+    <div class="mid"><span class="arrow" aria-hidden="true">→</span><div class="box">조합 최적화<br>알고리즘</div><span class="arrow" aria-hidden="true">→</span></div>
+    <div class="receipt">
+      <div class="rh">출력 · 최저가 조합 영수증</div>
+      <div class="ln"><span>닭가슴살</span><span>2,500</span></div>
+      <div class="ln"><span>삶은계란 2입</span><span>1,800</span></div>
+      <div class="ln"><span>우유</span><span>1,200</span></div>
+      <div class="ln total"><span>합계 · 41g · 400kcal</span><span>5,500원</span></div>
+    </div>
+  </div>
+  <p class="note">영수증의 상품과 숫자는 설명용 가상 예시입니다. 실제 프로젝트에서는 CU 상품 데이터를 사용합니다.</p>
+
+  <div class="tabs" role="tablist" aria-label="브리프 목차">
+    <button class="tab" role="tab" id="t0" aria-controls="p0" aria-selected="true">01 · 핵심 아이디어</button>
+    <button class="tab" role="tab" id="t1" aria-controls="p1" aria-selected="false" tabindex="-1">02 · 직접 해보기</button>
+    <button class="tab" role="tab" id="t2" aria-controls="p2" aria-selected="false" tabindex="-1">03 · 알고리즘 3개</button>
+    <button class="tab" role="tab" id="t3" aria-controls="p3" aria-selected="false" tabindex="-1">04 · 진행 계획</button>
+  </div>
+
+  <!-- 01 -->
+  <section id="p0" class="panel" role="tabpanel" aria-labelledby="t0">
+    <h2>“단백질 많은 거 하나”가 아니라 “조합”을 찾는 문제</h2>
+    <p class="sub">하나씩 보면 좋은 상품도, 같이 담으면 칼로리를 넘기거나 오히려 비싸질 수 있어요.</p>
+    <div class="grid2">
+      <article class="card"><div class="num">01 / REAL</div><h3>실제 상황에서 나온 문제</h3><p>운동 후 편의점에서 단백질은 채우고 싶은데 돈은 아끼고 싶고, 칼로리는 너무 많아도 적어도 안 되는 상황입니다.</p></article>
+      <article class="card"><div class="num">02 / COMBINATION</div><h3>여러 상품의 조합</h3><p>상품마다 담을지 말지 두 가지 선택이 있어서, 상품이 50개면 가능한 조합이 2⁵⁰개(약 1,000조 개)입니다. 전부 확인할 수 없어요.</p></article>
+      <article class="card"><div class="num">03 / TWO-SIDED</div><h3>칼로리는 위아래로 묶임</h3><p>단백질은 “이상”이지만 칼로리는 “최소~최대” 범위입니다. 이 양쪽 제약 때문에 단순한 방법이 자주 틀립니다.</p></article>
+      <article class="card"><div class="num">04 / COMPARE</div><h3>같은 문제, 세 가지 풀이</h3><p>빠르지만 틀릴 수 있는 방법과, 정확하지만 비용이 드는 방법 두 가지를 같은 입력으로 비교합니다.</p></article>
+    </div>
+    <div class="formula" aria-label="수학적 정의">
+      <span class="c">목표</span>&nbsp;&nbsp; 총가격 Σ pᵢ·xᵢ 를 최소화<br>
+      <span class="c">조건</span>&nbsp;&nbsp; 단백질 Σ rᵢ·xᵢ ≥ R<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 칼로리 C<sub>min</sub> ≤ Σ cᵢ·xᵢ ≤ C<sub>max</sub><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; xᵢ ∈ {0, 1} <span class="c">(상품 i를 담으면 1, 안 담으면 0)</span>
+    </div>
+    <div class="callout"><strong>한 줄 요약:</strong> 제약이 두 개 붙은 <strong>0/1 배낭 문제</strong>의 변형입니다. 수업에서 배운 Greedy · 동적계획법 · 분기한정법을 실제 데이터에 적용하고 비교하기 좋은 구조예요.</div>
+  </section>
+
+  <!-- 02 -->
+  <section id="p1" class="panel" role="tabpanel" aria-labelledby="t1" hidden>
+    <h2>조건을 바꿔 보면서 세 알고리즘 결과 비교하기</h2>
+    <p class="sub">가상 상품 8개로 실제 알고리즘을 이 페이지에서 바로 돌립니다. 슬라이더를 움직이면 결과가 다시 계산돼요.</p>
+    <div class="controls">
+      <div class="ctl"><label for="rR">단백질 최소 <output id="oR" for="rR">40g</output></label><input type="range" id="rR" min="10" max="90" step="5" value="40"></div>
+      <div class="ctl"><label for="rMin">칼로리 최소 <output id="oMin" for="rMin">400kcal</output></label><input type="range" id="rMin" min="100" max="1200" step="50" value="400"></div>
+      <div class="ctl"><label for="rMax">칼로리 최대 <output id="oMax" for="rMax">700kcal</output></label><input type="range" id="rMax" min="200" max="1500" step="50" value="700"></div>
+    </div>
+    <div class="presets"><span>시나리오</span>
+      <button class="preset" type="button" data-p="20,300,500">가벼운 간식 · 20g / 300~500</button>
+      <button class="preset" type="button" data-p="40,400,700">한 끼 · 40g / 400~700</button>
+      <button class="preset" type="button" data-p="60,600,900">고단백 · 60g / 600~900</button>
+      <button class="preset" type="button" data-p="40,300,400">좁은 칼로리 · 40g / 300~400</button>
+      <button class="preset" type="button" data-p="90,200,300">불가능 · 90g / 200~300</button>
+    </div>
+    <div class="shelf" id="shelf" aria-label="가상 상품 진열대"></div>
+    <div class="legend"><span><i style="background:var(--brand)"></i>정답 조합 (DP·분기한정법)</span><span><i style="background:var(--greedy)"></i>Greedy가 고른 상품</span></div>
+    <div class="results" aria-live="polite">
+      <div class="res greedy"><h3>Greedy <small>빠른 근사</small></h3><div class="price" id="gPrice">-</div><div class="what" id="gWhat"></div><div class="meta" id="gMeta"></div><span class="verdict" id="gVerdict"></span></div>
+      <div class="res"><h3>동적계획법 <small>정확한 최적해</small></h3><div class="price" id="dPrice">-</div><div class="what" id="dWhat"></div><div class="meta" id="dMeta"></div><span class="verdict" id="dVerdict"></span></div>
+      <div class="res"><h3>분기한정법 <small>정확한 최적해</small></h3><div class="price" id="bPrice">-</div><div class="what" id="bWhat"></div><div class="meta" id="bMeta"></div><span class="verdict" id="bVerdict"></span></div>
+    </div>
+    <div class="callout warn" id="demoNote"></div>
+    <p class="note">상품명·가격·영양값은 알고리즘 설명용 가상 값이며 실제 CU 상품 정보가 아닙니다. 영양 수치는 실험 시나리오 예시이고, 특정인에게 권장하는 기준이 아닙니다.</p>
+  </section>
+
+  <!-- 03 -->
+  <section id="p2" class="panel" role="tabpanel" aria-labelledby="t2" hidden>
+    <h2>세 알고리즘을 그림으로 이해하기</h2>
+    <p class="sub">기본 조건(단백질 40g, 400~700kcal)과 가상 상품 8개로 설명합니다. <strong>Greedy는 빠르게 고르고, DP는 표를 채워 정답을 찾고, 분기한정법은 가망 없는 경우를 잘라내며 정답을 찾습니다.</strong></p>
+
+    <article class="explain">
+      <div class="ehead"><span class="enum g">01</span><div><h3>Greedy · 가성비 순서로 담기</h3><p>단백질 1g이 가장 싼 상품부터 담으면 되지 않을까?</p></div></div>
+      <div class="visual">
+        <div class="vlabel">단백질 1g당 가격 (낮을수록 먼저 담음)</div>
+        <div class="rank" id="rank"></div>
+        <div class="story">
+          <div><b>1단계</b>가성비 1·2위 닭가슴살 + 단백질음료로 단백질 43g 달성</div>
+          <div><b>2단계</b>칼로리가 280kcal로 부족 → 칼로리가 싼 삼각김밥 추가</div>
+          <div><b>결과</b>6,600원. 정답 5,500원보다 1,100원 비쌈</div>
+        </div>
+      </div>
+      <p class="efoot"><strong>장점:</strong> 정렬 한 번이면 끝나서 매우 빠름 (O(n log n)). <strong>한계:</strong> 처음 고른 상품을 되돌리지 않아서 최저가를 보장하지 못하고, 조건이 빡빡하면 정답이 있는데도 “조합 없음”을 낼 수 있어요. 이 실패 사례를 실제 데이터로 분석하는 게 프로젝트의 첫 단계입니다.</p>
+    </article>
+
+    <article class="explain">
+      <div class="ehead"><span class="enum">02</span><div><h3>동적계획법 (DP) · 표를 채워서 정답 찾기</h3><p>“단백질 x g, 칼로리 y kcal를 만드는 가장 싼 값”을 표에 적어 둔다면?</p></div></div>
+      <div class="visual">
+        <div class="vlabel">표의 각 칸 = 그 단백질·칼로리 구간을 만드는 최저 가격 (가상 상품 8개로 계산, 보기 좋게 10g·100kcal 단위로 묶음)</div>
+        <div class="tablewrap"><table class="dp" id="dpTable" aria-label="DP 표 예시"></table></div>
+      </div>
+      <p class="efoot"><strong>핵심:</strong> 상품을 하나씩 추가하면서 표를 갱신하고, 초록 영역(단백질 40g 이상 · 400~700kcal) 중 가장 싼 칸이 정답입니다. 단백질은 목표 R을 넘으면 R칸에 모아서 표 크기를 줄여요. <strong>한계:</strong> 표 크기가 (R+1)×(C<sub>max</sub>+1)이라 조건이 커지면 메모리가 늘어나고, 소수점 영양값은 정수로 바꿔야 합니다.</p>
+    </article>
+
+    <article class="explain">
+      <div class="ehead"><span class="enum">03</span><div><h3>분기한정법 (Branch &amp; Bound) · 가망 없는 가지 자르기</h3><p>지금까지 찾은 최저가보다 비싸질 게 뻔한 경우는 더 볼 필요 없지 않을까?</p></div></div>
+      <div class="visual tree">
+        <div class="vlabel">“담는다 / 안 담는다”로 갈라지는 탐색 트리 (개념도)</div>
+        <svg viewBox="0 0 640 250" role="img" aria-label="탐색 트리: 일부 가지는 하한이 현재 최저가 이상이라 잘려 나감">
+          <path class="edge" d="M320 34 L170 96"/><path class="edge" d="M320 34 L470 96"/>
+          <path class="edge" d="M170 118 L90 176"/><path class="edge" d="M170 118 L250 176"/>
+          <path class="edge cut" d="M470 118 L400 176"/><path class="edge cut" d="M470 118 L540 176"/>
+          <rect class="node live" x="250" y="12" width="140" height="44" rx="8"/><text x="320" y="31" text-anchor="middle">시작</text><text class="sm" x="320" y="47" text-anchor="middle">닭가슴살 담을까?</text>
+          <text class="sm" x="228" y="62" text-anchor="middle">담음</text><text class="sm" x="412" y="62" text-anchor="middle">안 담음</text>
+          <rect class="node live" x="100" y="96" width="140" height="44" rx="8"/><text x="170" y="115" text-anchor="middle">2,500원 · 23g</text><text class="sm" x="170" y="131" text-anchor="middle">계속 탐색</text>
+          <rect class="node dead" x="400" y="96" width="140" height="44" rx="8"/><text x="470" y="115" text-anchor="middle">하한 6,000원 ≥ 5,500</text><text class="sm" x="470" y="131" text-anchor="middle">아래는 볼 필요 없음</text>
+          <line class="x" x1="430" y1="150" x2="446" y2="166"/><line class="x" x1="446" y1="150" x2="430" y2="166"/>
+          <line class="x" x1="494" y1="150" x2="510" y2="166"/><line class="x" x1="510" y1="150" x2="494" y2="166"/>
+          <rect class="node ans" x="20" y="176" width="140" height="48" rx="8"/><text class="ans-t" x="90" y="196" text-anchor="middle">+계란 +우유</text><text class="ans-t" x="90" y="214" text-anchor="middle">5,500원 ✓ 최저가</text>
+          <rect class="node live" x="180" y="176" width="140" height="48" rx="8"/><text x="250" y="196" text-anchor="middle">다른 조합</text><text class="sm" x="250" y="214" text-anchor="middle">하한 비교 후 정리</text>
+          <rect class="node" x="340" y="176" width="120" height="48" rx="8" opacity=".45"/><text class="sm" x="400" y="204" text-anchor="middle">탐색 안 함</text>
+          <rect class="node" x="480" y="176" width="120" height="48" rx="8" opacity=".45"/><text class="sm" x="540" y="204" text-anchor="middle">탐색 안 함</text>
+        </svg>
+        <div class="counter">
+          <div><strong id="bbVisited">-</strong><small>분기한정법이 실제로 방문한 노드</small></div>
+          <div><strong id="bbTotal">-</strong><small>전부 다 보는 완전탐색 트리의 노드</small></div>
+        </div>
+      </div>
+      <p class="efoot"><strong>하한(bound):</strong> “지금 가격 + 부족한 단백질 × 남은 상품 중 가장 싼 1g당 가격”. 이 값이 이미 찾은 최저가보다 크면 그 가지 아래는 볼 필요가 없어요. 트리의 숫자는 설명용이고, 아래 방문 노드 수는 가상 상품 8개로 이 페이지에서 직접 계산한 값입니다. <strong>한계:</strong> 자르지 못하는 입력에서는 상품 수가 늘수록 시간이 급격히 늘 수 있습니다.</p>
+    </article>
+
+    <table class="compare">
+      <thead><tr><th>알고리즘</th><th>최저가 보장</th><th>속도</th><th>메모리</th><th>약점</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Greedy</strong></td><td>✗</td><td>매우 빠름</td><td>적음</td><td>칼로리 범위 때문에 오답·거짓 실패</td></tr>
+        <tr><td><strong>동적계획법</strong></td><td>✓</td><td>조건 크기에 비례</td><td>표 크기만큼 큼</td><td>조건이 커지면 메모리 증가</td></tr>
+        <tr><td><strong>분기한정법</strong></td><td>✓</td><td>입력에 따라 크게 다름</td><td>적음</td><td>최악의 경우 지수 시간</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 04 -->
+  <section id="p3" class="panel" role="tabpanel" aria-labelledby="t3" hidden>
+    <h2>작게 만들고, 문제를 찾고, 개선하기</h2>
+    <p class="sub">교수님이 강조하신 “기본 구현 → 문제점 분석 → 개선 → 비교” 순서를 그대로 따릅니다.</p>
+    <div class="steps">
+      <div class="step"><span class="circle">1</span><div><h3>실제 CU 상품 데이터 확보</h3><p>상품명·가격은 CU 공식 사이트, 칼로리·단백질은 포장지 영양성분표와 식약처 영양DB로 확인합니다. 행사가는 빼고 정상가를 씁니다.</p></div></div>
+      <div class="step"><span class="circle">2</span><div><h3>Greedy 구현 + 실패 사례 분석</h3><p>어떤 조건에서 최저가를 놓치는지, 정답이 있는데 “조합 없음”을 내는지 실제 데이터로 찾습니다.</p></div></div>
+      <div class="step"><span class="circle">3</span><div><h3>DP 구현으로 정확한 최적해</h3><p>Greedy의 한계를 해결하고, 표 크기·메모리가 조건에 따라 어떻게 늘어나는지 측정합니다.</p></div></div>
+      <div class="step"><span class="circle">4</span><div><h3>분기한정법 구현으로 메모리 문제 개선</h3><p>DP와 같은 정답을 내는지 교차 검증하고, 가지치기가 얼마나 효과적인지 봅니다.</p></div></div>
+      <div class="step"><span class="circle">5</span><div><h3>같은 입력으로 비교실험</h3><p>최적해 대비 가격 차이, 해를 못 찾은 비율, 실행시간, 메모리를 상품 수와 조건의 엄격함을 바꿔 가며 반복 측정합니다.</p></div></div>
+    </div>
+    <div class="callout"><strong>공정한 비교:</strong> 세 알고리즘 모두 같은 상품 데이터, 같은 제약조건, 같은 목적함수를 씁니다. 작은 규모에서는 완전탐색으로 정답을 확인하고, 데이터 로딩 시간과 알고리즘 실행 시간은 따로 잽니다.</div>
+
+    <h2 style="margin-top:30px">같이 정하고 싶은 것 <span class="tag prop">의견 부탁</span></h2>
+    <p class="sub">편하게 의견 남겨 주세요.</p>
+    <ol class="qs">
+      <li>주제 자체가 괜찮은지, 더 현실적인 방향이나 걱정되는 부분이 있는지</li>
+      <li>알고리즘 3개(Greedy · DP · 분기한정법) 구성에 동의하는지, 다른 후보가 있는지</li>
+      <li>같은 상품을 여러 개 사는 경우(예: 계란 2세트)를 처음부터 허용할지, 나중에 확장할지</li>
+      <li>역할 분담: 데이터 수집 / Greedy / DP / 분기한정법 / 실험·보고서 중 하고 싶은 것</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+// ---------------- 가상 상품 (설명용, 실제 CU 데이터 아님) ----------------
+const ITEMS = [
+  { id: "B", name: "닭가슴살", price: 2500, protein: 23, kcal: 120 },
+  { id: "C", name: "단백질음료", price: 2800, protein: 20, kcal: 160 },
+  { id: "A", name: "삶은계란 2입", price: 1800, protein: 12, kcal: 150 },
+  { id: "E", name: "우유", price: 1200, protein: 6, kcal: 130 },
+  { id: "D", name: "삼각김밥", price: 1300, protein: 5, kcal: 190 },
+  { id: "F", name: "도시락", price: 5000, protein: 25, kcal: 750 },
+  { id: "H", name: "샌드위치", price: 3200, protein: 14, kcal: 330 },
+  { id: "G", name: "그릭요거트", price: 3000, protein: 10, kcal: 140 },
+];
+const won = n => n.toLocaleString("ko-KR");
+
+// ---------------- 탭 ----------------
+const tabs = [...document.querySelectorAll(".tab")];
+function selectTab(n, focus) {
+  tabs.forEach((t, i) => {
+    const on = i === n;
+    t.setAttribute("aria-selected", String(on));
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById("p" + i).hidden = !on;
+  });
+  if (focus) tabs[n].focus();
+}
+tabs.forEach((t, i) => {
+  t.addEventListener("click", () => selectTab(i));
+  t.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") selectTab((i + 1) % tabs.length, true);
+    if (e.key === "ArrowLeft") selectTab((i - 1 + tabs.length) % tabs.length, true);
+  });
+});
+
+// ---------------- 알고리즘 ----------------
+function summarize(sel) {
+  return sel.reduce((s, it) => ({ price: s.price + it.price, protein: s.protein + it.protein, kcal: s.kcal + it.kcal }),
+    { price: 0, protein: 0, kcal: 0 });
+}
+
+// Greedy: 1) 단백질 1g당 가격 순으로 칼로리 상한을 넘지 않게 담아 단백질 충족
+//         2) 칼로리가 부족하면 1kcal당 가격이 싼 순서로 상한 안에서 추가
+function greedy(items, R, cmin, cmax) {
+  const sel = []; let P = 0, K = 0;
+  for (const it of [...items].sort((a, b) => a.price / a.protein - b.price / b.protein)) {
+    if (P >= R) break;
+    if (K + it.kcal <= cmax) { sel.push(it); P += it.protein; K += it.kcal; }
+  }
+  if (P < R) return { sel, ok: false, why: "단백질을 채우지 못함" };
+  const rest = items.filter(it => !sel.includes(it)).sort((a, b) => a.price / a.kcal - b.price / b.kcal);
+  for (const it of rest) {
+    if (K >= cmin) break;
+    if (K + it.kcal <= cmax) { sel.push(it); K += it.kcal; P += it.protein; }
+  }
+  if (K < cmin) return { sel, ok: false, why: "칼로리 하한을 채우지 못함" };
+  return { sel, ok: true };
+}
+
+// DP: best[p][k] = 단백질 p(R에서 상한 고정), 칼로리 k를 정확히 만드는 최저가
+function dp(items, R, cmin, cmax) {
+  const W = cmax + 1, INF = Infinity;
+  let best = new Float64Array((R + 1) * W).fill(INF);
+  const choice = [];
+  best[0] = 0;
+  for (let t = 0; t < items.length; t++) {
+    const it = items[t];
+    const next = best.slice();
+    const took = new Uint8Array((R + 1) * W);
+    for (let p = 0; p <= R; p++) for (let k = 0; k + it.kcal <= cmax; k++) {
+      const v = best[p * W + k]; if (v === INF) continue;
+      const np = Math.min(R, p + it.protein), nk = k + it.kcal, idx = np * W + nk;
+      if (v + it.price < next[idx]) { next[idx] = v + it.price; took[idx] = 1; }
+    }
+    choice.push({ took, prev: best });
+    best = next;
+  }
+  let ans = INF, ak = -1;
+  for (let k = cmin; k <= cmax; k++) if (best[R * W + k] < ans) { ans = best[R * W + k]; ak = k; }
+  if (ans === INF) return { ok: false, cells: (R + 1) * W };
+  // 역추적
+  const sel = []; let p = R, k = ak;
+  for (let t = items.length - 1; t >= 0; t--) {
+    const idx = p * W + k;
+    if (choice[t].took[idx]) {
+      const it = items[t]; sel.push(it); k -= it.kcal;
+      // 이전 단백질 값 찾기 (R에서 상한 고정된 경우 여러 후보 중 가격이 맞는 것)
+      let found = -1;
+      for (let pp = 0; pp <= R; pp++) {
+        if (Math.min(R, pp + it.protein) !== p) continue;
+        const prevV = choice[t].prev[pp * W + k];
+        const curV = (t + 1 < items.length) ? choice[t + 1].prev[idx] : best[idx];
+        if (prevV + it.price === curV) { found = pp; break; }
+      }
+      p = found;
+    }
+  }
+  return { ok: true, sel: sel.reverse(), price: ans, cells: (R + 1) * W };
+}
+
+// 분기한정법: 단백질 1g당 가격 순으로 정렬, 하한 = 현재가격 + 부족단백질 × 남은 상품 최저 1g당 가격
+function branchAndBound(items, R, cmin, cmax) {
+  const its = [...items].sort((a, b) => a.price / a.protein - b.price / b.protein);
+  const n = its.length;
+  const minRatio = new Array(n + 1).fill(Infinity);
+  for (let i = n - 1; i >= 0; i--) minRatio[i] = Math.min(minRatio[i + 1], its[i].price / its[i].protein);
+  let best = Infinity, bestSel = null, visited = 0;
+  const cur = [];
+  (function dfs(i, P, K, cost) {
+    visited++;
+    if (K > cmax) return;
+    if (P >= R && K >= cmin) { if (cost < best) { best = cost; bestSel = [...cur]; } return; }
+    if (i === n) return;
+    const need = Math.max(0, R - P);
+    const lb = cost + (need > 0 ? need * minRatio[i] : 0);
+    if (lb >= best) return;
+    cur.push(its[i]); dfs(i + 1, P + its[i].protein, K + its[i].kcal, cost + its[i].price); cur.pop();
+    dfs(i + 1, P, K, cost);
+  })(0, 0, 0, 0);
+  return { ok: bestSel !== null, sel: bestSel || [], price: best, visited, total: 2 ** (n + 1) - 1 };
+}
+
+// ---------------- 데모 화면 ----------------
+const rR = document.getElementById("rR"), rMin = document.getElementById("rMin"), rMax = document.getElementById("rMax");
+const shelf = document.getElementById("shelf");
+const cards = ITEMS.map(it => {
+  const el = document.createElement("div");
+  el.className = "item";
+  el.innerHTML = `<span class="badges"></span><span class="nm">${it.name}</span><span class="pr">${won(it.price)}원</span><span class="nu">단백질 ${it.protein}g · ${it.kcal}kcal</span>`;
+  shelf.appendChild(el);
+  return el;
+});
+const names = sel => sel.map(it => it.name).join(" + ");
+
+function render() {
+  let R = +rR.value, cmin = +rMin.value, cmax = +rMax.value;
+  if (cmax < cmin) { cmax = cmin; rMax.value = cmin; }
+  document.getElementById("oR").textContent = R + "g";
+  document.getElementById("oMin").textContent = cmin + "kcal";
+  document.getElementById("oMax").textContent = cmax + "kcal";
+
+  const g = greedy(ITEMS, R, cmin, cmax), d = dp(ITEMS, R, cmin, cmax), b = branchAndBound(ITEMS, R, cmin, cmax);
+  const optSel = d.ok ? d.sel : [];
+  cards.forEach((el, i) => {
+    const it = ITEMS[i], inOpt = optSel.includes(it), inG = g.ok && g.sel.includes(it);
+    el.classList.toggle("opt", inOpt);
+    el.querySelector(".badges").innerHTML = (inOpt ? '<span class="b o">정답</span>' : "") + (inG ? '<span class="b g">G</span>' : "");
+  });
+
+  const set = (p, sel, price, meta, verdict, cls) => {
+    document.getElementById(p + "Price").textContent = price;
+    document.getElementById(p + "What").textContent = sel;
+    document.getElementById(p + "Meta").textContent = meta;
+    const v = document.getElementById(p + "Verdict"); v.textContent = verdict; v.className = "verdict " + cls;
+  };
+  const metaOf = sel => { const s = summarize(sel); return `단백질 ${s.protein}g · ${s.kcal}kcal`; };
+
+  if (g.ok) {
+    const gp = summarize(g.sel).price;
+    if (d.ok && gp > d.price) set("g", names(g.sel), won(gp) + "원", metaOf(g.sel), `최적보다 ${won(gp - d.price)}원 비쌈`, "gap");
+    else set("g", names(g.sel), won(gp) + "원", metaOf(g.sel), "이번엔 최적해와 같음", "ok");
+  } else {
+    set("g", g.why, "실패", "", d.ok ? "정답이 있는데 못 찾음" : "가능한 조합 없음", d.ok ? "fail" : "ok");
+  }
+  if (d.ok) set("d", names(d.sel), won(d.price) + "원", metaOf(d.sel) + ` · 표 ${won(d.cells)}칸`, "최적해", "ok");
+  else set("d", "조건을 만족하는 조합이 없음", "없음", `표 ${won(d.cells)}칸 확인`, "가능한 조합 없음", "ok");
+  if (b.ok) set("b", names(b.sel), won(b.price) + "원", metaOf(b.sel) + ` · 노드 ${b.visited}/${b.total}`, d.ok && b.price === d.price ? "DP와 같은 답 ✓" : "확인 필요", d.ok && b.price === d.price ? "ok" : "fail");
+  else set("b", "조건을 만족하는 조합이 없음", "없음", `노드 ${b.visited}/${b.total} 방문`, "가능한 조합 없음", "ok");
+
+  const note = document.getElementById("demoNote");
+  if (!d.ok) note.innerHTML = "<strong>조합 없음:</strong> 이 조건을 만족하는 조합이 실제로 없습니다. 프로그램은 이런 경우 “해결 가능한 조합 없음”을 정확히 알려줘야 해요.";
+  else if (!g.ok) note.innerHTML = "<strong>Greedy의 거짓 실패:</strong> 정답 조합이 있는데도 Greedy는 찾지 못했습니다. 칼로리 상한·하한을 동시에 맞춰야 해서 생기는 문제예요.";
+  else if (summarize(g.sel).price > d.price) note.innerHTML = `<strong>Greedy의 한계:</strong> 가성비 좋은 상품부터 담았지만 최저가보다 ${won(summarize(g.sel).price - d.price)}원 비쌉니다. 정확한 알고리즘이 필요한 이유예요.`;
+  else note.innerHTML = "<strong>이번 조건에서는</strong> Greedy도 최저가를 찾았습니다. 다른 시나리오를 눌러 보면 차이가 생기는 경우를 볼 수 있어요.";
+}
+[rR, rMin, rMax].forEach(el => el.addEventListener("input", render));
+rMin.addEventListener("input", () => { if (+rMax.value < +rMin.value) rMax.value = rMin.value; render(); });
+rMax.addEventListener("input", () => { if (+rMax.value < +rMin.value) rMin.value = rMax.value; render(); });
+document.querySelectorAll(".preset").forEach(btn => btn.addEventListener("click", () => {
+  const [R, a, b] = btn.dataset.p.split(",").map(Number);
+  rR.value = R; rMin.value = a; rMax.value = b; render();
+}));
+render();
+
+// ---------------- 03 탭 그림 ----------------
+// Greedy 순위 막대
+(function () {
+  const sorted = [...ITEMS].sort((a, b) => a.price / a.protein - b.price / b.protein);
+  const max = Math.max(...sorted.map(it => it.price / it.protein));
+  document.getElementById("rank").innerHTML = sorted.map(it => {
+    const r = it.price / it.protein;
+    return `<div class="rrow"><span>${it.name}</span><span class="bar"><span style="width:${(r / max * 100).toFixed(1)}%"></span></span><span class="v">${Math.round(r)}원/g</span></div>`;
+  }).join("");
+})();
+
+// DP 표: 10g × 100kcal 구간별 최저가 (가상 상품 8개 전체 조합에서 계산)
+(function () {
+  const R = 40, cmin = 400, cmax = 700, pBins = [0, 10, 20, 30, 40], kBins = [0, 100, 200, 300, 400, 500, 600, 700];
+  const grid = pBins.map(() => kBins.map(() => Infinity));
+  const n = ITEMS.length;
+  for (let m = 0; m < (1 << n); m++) {
+    let P = 0, K = 0, C = 0;
+    for (let i = 0; i < n; i++) if (m >> i & 1) { P += ITEMS[i].protein; K += ITEMS[i].kcal; C += ITEMS[i].price; }
+    if (K > cmax + 99) continue;
+    const pi = Math.min(4, Math.floor(Math.min(P, R) / 10)), ki = Math.floor(K / 100);
+    if (ki >= kBins.length) continue;
+    if (C < grid[pi][ki]) grid[pi][ki] = C;
+  }
+  let best = Infinity;
+  for (let ki = 4; ki <= 7; ki++) best = Math.min(best, grid[4][ki]);
+  let html = "<tr><th>단백질 \\ 칼로리</th>" + kBins.map(k => `<th>${k}~</th>`).join("") + "</tr>";
+  for (let pi = pBins.length - 1; pi >= 0; pi--) {
+    html += `<tr><th>${pi === 4 ? "40g 이상" : pBins[pi] + "~" + (pBins[pi] + 9) + "g"}</th>`;
+    kBins.forEach((k, ki) => {
+      const v = grid[pi][ki], goal = pi === 4 && ki >= 4;
+      const cls = v === Infinity ? "empty" : (goal && v === best ? "best" : goal ? "goal" : "");
+      html += `<td class="${cls}${goal && cls !== "best" ? " goal" : ""}">${v === Infinity ? "–" : won(v)}</td>`;
+    });
+    html += "</tr>";
+  }
+  document.getElementById("dpTable").innerHTML = html;
+})();
+
+// 분기한정법 방문 노드 수 (기본 조건)
+(function () {
+  const b = branchAndBound(ITEMS, 40, 400, 700);
+  document.getElementById("bbVisited").textContent = b.visited + "개";
+  document.getElementById("bbTotal").textContent = b.total + "개";
+})();
+</script>

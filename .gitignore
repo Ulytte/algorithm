@@ -1,0 +1,15 @@
+# 식약처 원본 DB (약 700MB, GitHub 파일 한도 100MB 초과) — scripts/download_mfds.py 로 다시 받는다
+data/mfds/
+data/cache/
+
+# 실행 기록·임시 파일
+*.log
+data/*.txt
+results_run.log
+
+# Python
+__pycache__/
+*.pyc
+
+# 개인 설정
+.claude/

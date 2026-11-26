@@ -1,0 +1,868 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>편의점 단백질 조합기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 레이아웃: 휴대폰 앱처럼 가운데 한 줄(최대 480px) + 아래 탭 바 + 밑에서 올라오는 시트.
+   찾기 탭은 '목표 카드 → 필터 칩 → 조합 카드' 순서로, 위에서 정하고 아래에서 고른다. */
+:root {
+  --bg: #eef1ed;
+  --surface: #ffffff;
+  --surface2: #f5f7f4;
+  --fg: #16201a;
+  --muted: #5c6962;
+  --line: #dde3dd;
+  --accent: #1d6b4f;
+  --accent-soft: #e0eee7;
+  --accent-ink: #ffffff;
+  --meal: #2c66a8;
+  --snack: #b85c25;
+  --carb: #d99a2b;
+  --prot: #1d6b4f;
+  --fat: #8466c9;
+  --warn: #9a6200;
+  --warn-soft: #faefd8;
+  --bad: #b5372c;
+  --bad-soft: #f8e1de;
+  --shadow: 0 1px 2px rgba(20, 40, 30, 0.06), 0 4px 14px rgba(20, 40, 30, 0.05);
+  --scrim: rgba(10, 20, 15, 0.42);
+  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1411; --surface: #18201b; --surface2: #1f2822; --fg: #e5ece7; --muted: #9babA2; --line: #2b3630;
+    --accent: #5cc095; --accent-soft: #1c3329; --accent-ink: #0c1410; --meal: #79a9e3; --snack: #e59a63;
+    --carb: #e4b04f; --prot: #5cc095; --fat: #ab93e6; --warn: #e6b450; --warn-soft: #3a2f16; --bad: #ee8a7f; --bad-soft: #3d2320;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3); --scrim: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1411; --surface: #18201b; --surface2: #1f2822; --fg: #e5ece7; --muted: #9babA2; --line: #2b3630;
+  --accent: #5cc095; --accent-soft: #1c3329; --accent-ink: #0c1410; --meal: #79a9e3; --snack: #e59a63;
+  --carb: #e4b04f; --prot: #5cc095; --fat: #ab93e6; --warn: #e6b450; --warn-soft: #3a2f16; --bad: #ee8a7f; --bad-soft: #3d2320;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3); --scrim: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.5; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--bg);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 calc(84px + env(safe-area-inset-bottom, 0px)); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+h1, h2, h3 { margin: 0; line-height: 1.25; text-wrap: balance; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 상단 바 */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding-block: 16px 10px; gap: 12px; }
+.topbar h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+.topbar .sub { font-size: 0.75rem; color: var(--muted); }
+.brandmark { display: flex; align-items: center; gap: 10px; }
+.logo { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font-weight: 700; font-size: 0.8rem; letter-spacing: -0.04em; }
+
+/* 카드 */
+.card { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); padding: 16px; }
+.stack { display: grid; gap: 12px; }
+.section-title { font-size: 0.8rem; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+
+/* 목표 카드 */
+.goal { display: grid; gap: 14px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px;
+  font-size: 0.85rem; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"], .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip .count { font-family: var(--mono); font-size: 0.75rem; background: var(--surface2); color: var(--fg); border-radius: 999px; padding: 0 6px; }
+.chip.on .count { background: rgba(255, 255, 255, 0.25); color: inherit; }
+.goal .row { display: grid; grid-template-columns: 4.2rem minmax(0, 1fr); align-items: center; gap: 10px; }
+.goal .row > span:first-child { font-size: 0.9rem; color: var(--muted); }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface2); }
+.stepper button { width: 36px; height: 36px; border: 0; background: transparent; font-size: 1.1rem; cursor: pointer; }
+.stepper button:active { background: var(--line); }
+.stepper input { width: 52px; height: 36px; border: 0; background: transparent; text-align: center; font-family: var(--mono); font-size: 0.95rem; color: var(--fg); }
+.stepper.sm button { width: 30px; height: 30px; font-size: 1rem; }
+.stepper.sm input { width: 34px; height: 30px; font-size: 0.85rem; }
+.unit { font-size: 0.85rem; color: var(--muted); margin-left: 6px; }
+.kcal-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kcal-row input { width: 74px; height: 36px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2);
+  text-align: center; font-family: var(--mono); font-size: 0.95rem; color: var(--fg); }
+.budget { display: grid; gap: 4px; }
+.budget-top { display: flex; justify-content: space-between; align-items: baseline; }
+.budget-top b { font-family: var(--mono); font-size: 1.05rem; }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+.goal .hint { font-size: 0.78rem; color: var(--muted); margin: -6px 0 0; }
+
+/* 필터 줄 */
+.filters { margin-top: 14px; }
+
+/* 결과 머리 */
+.result-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 22px 0 10px; flex-wrap: wrap; }
+.result-head h2 { font-size: 1.05rem; }
+.result-head h2 b { color: var(--accent); }
+.seg { display: flex; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; margin-bottom: 12px; }
+.seg button { flex: 1; border: 0; background: transparent; border-radius: 7px; padding: 6px 4px; font-size: 0.82rem; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
+
+/* 조합 카드 */
+.combos { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.combo { display: grid; gap: 12px; }
+.combo.best { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.rankline { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--muted); }
+.badge { font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface2); color: var(--muted); white-space: nowrap; }
+.badge.best { background: var(--accent); color: var(--accent-ink); }
+.badge.ev { background: var(--warn-soft); color: var(--warn); }
+.badge.warn { background: var(--bad-soft); color: var(--bad); }
+.price { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; margin-top: 2px; }
+.price small { font-size: 0.9rem; font-weight: 500; margin-left: 1px; }
+.subline { font-size: 0.85rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.ring { width: 72px; height: 72px; position: relative; }
+.ring svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+.ring .val { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.05; }
+.ring .val b { font-family: var(--mono); font-size: 1rem; }
+.ring .val span { font-size: 0.66rem; color: var(--muted); }
+.macro { display: grid; gap: 5px; }
+.macro .bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--surface2); }
+.macro .bar i { display: block; height: 100%; }
+.macro .legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 0.75rem; color: var(--muted); }
+.macro .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: var(--c); }
+.items { display: grid; gap: 2px; border-top: 1px solid var(--line); padding-top: 8px; }
+.item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 10px;
+  border: 0; background: transparent; text-align: left; cursor: pointer; width: 100%; }
+.item:hover { background: var(--surface2); }
+.tbadge { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 0.68rem; font-weight: 700;
+  letter-spacing: -0.04em; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.item .nm { font-size: 0.9rem; font-weight: 500; overflow-wrap: anywhere; }
+.item .meta { font-size: 0.75rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 8px; align-items: center; }
+.item .pr { font-family: var(--mono); font-size: 0.9rem; text-align: right; }
+.item .alt { font-size: 0.72rem; color: var(--accent); font-weight: 600; }
+.pin-mark { font-size: 0.68rem; font-weight: 700; color: var(--accent); }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 9px 8px; font-size: 0.85rem; font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn:active { background: var(--surface2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.btn.danger { color: var(--bad); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.empty { text-align: center; padding: 28px 20px; display: grid; gap: 10px; justify-items: center; }
+.empty h3 { font-size: 1.05rem; }
+.empty ul { text-align: left; margin: 0; padding-left: 18px; font-size: 0.88rem; color: var(--muted); display: grid; gap: 4px; }
+.notice { font-size: 0.8rem; color: var(--muted); padding: 10px 12px; border-radius: 10px; background: var(--surface2); }
+.notice.warn { background: var(--warn-soft); color: var(--warn); }
+.welcome { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; background: var(--accent-soft); box-shadow: none; }
+.welcome p { margin: 0; font-size: 0.88rem; }
+.skeleton { height: 220px; border-radius: 16px; background: linear-gradient(90deg, var(--surface) 0%, var(--surface2) 50%, var(--surface) 100%); background-size: 200% 100%; }
+@media (prefers-reduced-motion: no-preference) { .skeleton { animation: shimmer 1.2s infinite linear; } @keyframes shimmer { to { background-position: -200% 0; } } }
+
+/* 탭 바 */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.tabbar nav { max-width: 480px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tabbar button { border: 0; background: transparent; padding: 8px 0 10px; display: grid; justify-items: center; gap: 2px; font-size: 0.72rem; color: var(--muted); cursor: pointer; position: relative; }
+.tabbar button svg { width: 22px; height: 22px; }
+.tabbar button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+.tabbar .dot { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 16px; height: 16px; border-radius: 999px; background: var(--bad); color: #fff;
+  font-size: 0.65rem; display: grid; place-items: center; padding: 0 4px; font-family: var(--mono); }
+
+/* 시트 */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--surface); width: 100%; max-width: 480px; max-height: 88vh; overflow: auto; border-radius: 20px 20px 0 0;
+  padding: 8px max(16px, env(safe-area-inset-left, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px; }
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: up 0.18s ease-out; } @keyframes up { from { transform: translateY(24px); opacity: 0.6; } } }
+.grab { width: 40px; height: 4px; border-radius: 999px; background: var(--line); margin: 4px auto 2px; }
+.sheet h2 { font-size: 1.1rem; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.x { border: 0; background: var(--surface2); width: 32px; height: 32px; border-radius: 999px; cursor: pointer; font-size: 1rem; }
+.trow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.trow label { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
+.trow .cnt { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; flex: none; }
+.grp-head { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.grp-head b { font-size: 0.95rem; }
+.qnote { font-size: 0.75rem; color: var(--muted); }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.field input[type="number"], .field select, .search { height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); color: var(--fg); padding: 0 10px; font: inherit; }
+.field input[type="number"] { width: 100px; text-align: right; font-family: var(--mono); }
+.search { width: 100%; }
+.list { display: grid; gap: 2px; }
+.lrow { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; }
+.lrow .nm { font-size: 0.88rem; }
+.lrow .meta { font-size: 0.74rem; color: var(--muted); }
+.nut { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.nut td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+.nut td:last-child { text-align: right; font-family: var(--mono); }
+.seg2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; }
+.ev-row { padding: 10px 0; border-bottom: 1px solid var(--line); display: grid; gap: 4px; }
+.ev-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ev-top .badge { background: transparent; border: 1px solid; }
+.ev-val { font-size: 0.9rem; }
+.ev-src a, .linkbtn { color: var(--accent); word-break: keep-all; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; }
+.seg2 button { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 4px; cursor: pointer; font-size: 0.85rem; }
+.seg2 button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.big-num { font-family: var(--mono); font-size: 2rem; font-weight: 600; color: var(--accent); }
+
+/* 장보기 */
+.zone { display: grid; gap: 4px; }
+.zone h3 { font-size: 0.85rem; color: var(--muted); font-weight: 600; margin-top: 6px; }
+.citem { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.citem.done .nm { text-decoration: line-through; color: var(--muted); }
+.progress { height: 6px; border-radius: 999px; background: var(--surface2); overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--accent); }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom, 0px)); z-index: 60;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 0.85rem; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+.foot-note { font-size: 0.75rem; color: var(--muted); margin: 18px 0 0; }
+</style>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brandmark"><div class="logo" aria-hidden="true">단백</div>
+      <div><h1>편의점 단백질 조합기</h1><div class="sub" id="datatag">CU 상품 불러오는 중…</div></div></div>
+  </header>
+  <main id="view"></main>
+</div>
+<div class="tabbar"><nav id="tabs" aria-label="화면">
+  <button type="button" data-tab="find" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>찾기</button>
+  <button type="button" data-tab="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>저장<span class="dot" id="dot-saved" hidden></span></button>
+  <button type="button" data-tab="cart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l2 11h10l2-8H7.2"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>장보기<span class="dot" id="dot-cart" hidden></span></button>
+  <button type="button" data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1.2-3.6 4-5.2 7-5.2s5.8 1.6 7 5.2"/></svg>내 정보</button>
+</nav></div>
+<div id="sheet-root"></div>
+<div id="toast-root"></div>
+
+<script src="algo.js"></script>
+<script>
+"use strict";
+// ================= 상수 =================
+const GROUPS = [
+  { name: "식사", color: "var(--meal)", types: ["도시락", "김밥·삼각김밥", "샌드위치·햄버거", "샐러드", "라면·면·떡볶이", "밥·죽", "닭가슴살·육가공", "계란·두부", "참치·수산"] },
+  { name: "간식·음료", color: "var(--snack)", types: ["과자·빵", "아이스크림", "견과·안주", "우유·두유·요거트", "단백질음료·식품", "기타음료", "기타식품"] },
+];
+const ALL_TYPES = GROUPS.flatMap((g) => g.types);
+const SHORT = { "도시락": "도시락", "김밥·삼각김밥": "김밥", "샌드위치·햄버거": "샌드", "샐러드": "샐러드", "라면·면·떡볶이": "라면",
+  "밥·죽": "밥·죽", "닭가슴살·육가공": "닭·햄", "계란·두부": "계란", "참치·수산": "참치", "과자·빵": "과자", "아이스크림": "아이스",
+  "견과·안주": "견과", "우유·두유·요거트": "우유", "단백질음료·식품": "프로틴", "기타음료": "음료", "기타식품": "기타" };
+const GROUP_OF = {}; GROUPS.forEach((g) => g.types.forEach((t) => (GROUP_OF[t] = g)));
+// 장보기 구역: CU 홈페이지의 상품 분류 그대로 (근거: 수집한 CU 상품 목록의 분류값)
+const ZONES = ["간편식사", "식품", "음료", "과자류", "아이스크림"];
+
+// ---- 근거가 있는 기준값 (출처는 아래 SRC, 화면의 '근거 보기'와 docs/기준값_근거.md 에 정리) ----
+const SRC = {
+  iom: { name: "미국 IOM 에너지 필요추정량 식 (2002, 한국인 영양소 섭취기준이 2005년부터 사용)", url: "https://koreascience.kr/article/JAKO202108360693676.page?lang=ko" },
+  iomEq: { name: "IOM 성인 에너지 필요추정량 식과 신체활동 계수 (통계청 캐나다 재수록)", url: "https://www150.statcan.gc.ca/n1/pub/82-003-x/2008004/article/10703/t/5800493-eng.htm" },
+  kdriP: { name: "2020 한국인 영양소 섭취기준 단백질 권장섭취량 0.91g/kg (한국영양학회지 해설)", url: "https://www.koreascience.or.kr/article/JAKO202210242857035.page" },
+  kdri25: { name: "보건복지부 보도자료: 2025 한국인 영양소 섭취기준 개정 (2025-12-31)", url: "https://www.mohw.go.kr/board.es?mid=a10503010100&bid=0027&act=view&list_no=1488441&tag=&nPage=1" },
+  issn: { name: "ISSN 입장문: 단백질과 운동 (Jäger 외, 2017) — 하루 1.4~2.0g/kg, 1회 0.25g/kg", url: "https://pubmed.ncbi.nlm.nih.gov/28642676/" },
+  hector: { name: "Hector & Phillips (2018) 체중 감량 중 단백질 1.6~2.4g/kg", url: "https://pubmed.ncbi.nlm.nih.gov/29182451/" },
+  murphy: { name: "Murphy, Hector & Phillips (2015) 감량 시 하루 약 500kcal 적자", url: "https://pubmed.ncbi.nlm.nih.gov/25014731/" },
+  who2000: { name: "WHO 당류 지침 (2015): 하루 2,000kcal 성인을 예로 듦", url: "https://who.int/news/item/04-03-2015-who-calls-on-countries-to-reduce-sugars-intake-among-adults-and-children" },
+  cu: { name: "CU 홈페이지 상품 목록 (가격·행사 표시·분류)", url: "https://cu.bgfretail.com/product/product.do?category=product" },
+};
+const PA = { m: { sed: 1.0, low: 1.11, act: 1.25, very: 1.48 }, f: { sed: 1.0, low: 1.12, act: 1.27, very: 1.45 } };
+const ACT = { sed: ["비활동적", "거의 앉아서 생활"], low: ["저활동적", "가벼운 활동 (한국인 평균 수준)"], act: ["활동적", "주 3~5회 운동"], very: ["매우 활동적", "거의 매일 강도 높은 운동"] };
+const GOALS = {
+  gain: { name: "근육 늘리기", f: 1.4, deficit: 0, why: "ISSN 권장 범위 하루 1.4~2.0g/kg의 하한", src: ["issn"] },
+  keep: { name: "건강 유지", f: 0.91, deficit: 0, why: "한국인 영양소 섭취기준 권장섭취량 0.91g/kg", src: ["kdriP"] },
+  lose: { name: "체중 줄이기", f: 1.6, deficit: 500, why: "감량 중 권장 범위 1.6~2.4g/kg의 하한, 칼로리는 하루 500kcal 적게", src: ["hector", "murphy"] },
+};
+const DOSE_PER_KG = 0.25;   // ISSN 1회 단백질 0.25g/kg
+const GRADE_TEXT = { "A": "제품명·용량까지 일치", "B": "제품명 일치, 용량은 추정", "B-": "비슷한 제품명으로 매칭 (오차 가능)" };
+const PAGE = 20, MAX_SHOWN = 200; // 처음 20개, 아래로 내리면 20개씩 더 (최대 200개)
+let SHOWN = PAGE;
+
+// ================= 상태 =================
+// 단백질 목표(R)는 기본값 없이 비워 둔다: 내 정보로 계산하거나 직접 넣는다.
+// 칼로리 최대(b)는 비워 두면 상관없음(null).
+const DEF = { R: null, b: null, noDefR: true, cap: 10000, types: ALL_TYPES.slice(), Q: {}, L: {},
+  pinned: [], excluded: [],
+  profile: { sex: null, age: null, height: null, weight: null, act: "low", goal: "gain", meals: 3 }, saved: [], cart: [], welcomed: false };
+let S = load();
+let ITEMS = [], BY_ID = new Map(), META = {};
+let RES = null, CTX = null, TAB = "find";
+const $ = (id) => document.getElementById(id);
+const won = (n) => Math.round(n).toLocaleString("ko-KR");
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const g1 = (x) => (Math.round(x * 10) / 10).toString();
+
+function load() {
+  try {
+    const v = JSON.parse(localStorage.getItem("pcombo.v1") || "null");
+    if (v) {
+      // 예전 버전(칼로리 최소 a가 있던 때)의 칼로리 범위는 버리고 '상관없음'으로
+      if ("a" in v) { delete v.a; v.b = null; delete v.lowSugar; delete v.lowNa; delete v.tol; }
+      // 예전 기본값 34g(근거가 약해 없앰)이 그대로 남아 있으면 비운다
+      if (!v.noDefR) { if (v.R === 34 || v.R === 40) v.R = null; v.noDefR = true; }
+      return Object.assign({}, DEF, v, { profile: Object.assign({}, DEF.profile, v.profile || {}) });
+    }
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEF));
+}
+function save() { try { localStorage.setItem("pcombo.v1", JSON.stringify(S)); } catch (e) {} }
+
+function toast(msg) {
+  const r = $("toast-root");
+  r.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+  clearTimeout(toast.t); toast.t = setTimeout(() => (r.innerHTML = ""), 2200);
+}
+function tbadge(type) { return `<span class="tbadge" style="--c:${GROUP_OF[type] ? GROUP_OF[type].color : "var(--muted)"}" aria-hidden="true">${esc(SHORT[type] || type)}</span>`; }
+function evText(ev) { return ev === "1+1" ? "1+1 행사: 2개를 1개 값에" : ev === "2+1" ? "2+1 행사: 3개를 2개 값에" : ""; }
+// 행사 상품을 적게 사는 행의 안내
+function promoText(it) {
+  if (it.promo === "1+1") return "1+1 행사 상품을 1개만 담았어요. 같은 값에 1개를 더 받을 수 있어요.";
+  if (it.promo === "2+1") return `2+1 행사 상품을 ${it.u}개만 담았어요. ${it.u === 2 ? "같은 값에 1개를 더 받을 수 있어요." : "2개 값을 내면 3개를 받아요."}`;
+  return "";
+}
+function evBadge(it) { return it.event ? `<span class="badge ev">${esc(it.event)}</span>` : it.promo ? `<span class="badge">${esc(it.promo)} 중 ${it.u}개</span>` : ""; }
+// 상품 수 (행사 상품의 1개 행·묶음 행은 한 상품)
+function productCount() { return new Set(ITEMS.map((x) => x.g || x.id)).size; }
+// 같은 상품의 모든 행 id (1개 행 + 행사 묶음 행)
+function groupIds(id) { const it = BY_ID.get(id); return it && it.g ? ITEMS.filter((x) => x.g === it.g).map((x) => x.id) : [id]; }
+// 내 정보 → 하루 칼로리(IOM 식), 하루 단백질, 한 끼 목표
+function profileOk(p) { return p.sex && p.age >= 19 && p.age <= 100 && p.height >= 120 && p.height <= 220 && p.weight >= 30 && p.weight <= 200; }
+function eer(p) {
+  const H = p.height / 100, pa = PA[p.sex][p.act];
+  return p.sex === "m" ? 662 - 9.53 * p.age + pa * (15.91 * p.weight + 539.6 * H)
+                       : 354 - 6.91 * p.age + pa * (9.36 * p.weight + 726 * H);
+}
+function plan(goalKey) {
+  const p = S.profile, ok = profileOk(p);
+  const g = GOALS[goalKey || p.goal];
+  const meals = p.meals || 3;
+  if (!ok) return { ok: false, meals };
+  const base = eer(p), dayKcal = base - g.deficit, dayP = p.weight * g.f;
+  const mealK = dayKcal / meals;
+  // 칼로리 최대는 체중 줄이기에만 건다 (감량 = 칼로리 적자). 나머지 목표는 상관없음.
+  return { ok: true, g, meals, base, dayKcal, dayP, R: Math.ceil(dayP / meals), mealK,
+    b: g.deficit ? Math.round(mealK / 10) * 10 : null, dose: p.weight * DOSE_PER_KG };
+}
+const kmax = () => (S.b == null ? Infinity : S.b); // 비어 있으면 칼로리 상관없음
+function srcLinks(keys) { return keys.map((k) => `<a href="${SRC[k].url}" target="_blank" rel="noopener">${esc(SRC[k].name)}</a>`).join("<br>"); }
+function sums(items) {
+  const t = { price: 0, pr: 0, kr: 0, carb: 0, fat: 0, sugar: 0, na: 0, p: 0 };
+  items.forEach((it) => { for (const k in t) t[k] += it[k] || 0; });
+  return t;
+}
+
+// ================= 계산 =================
+let timer = null;
+function schedule() { clearTimeout(timer); timer = setTimeout(compute, 150); }
+// more=true: 같은 조건에서 20개 더 (아래로 내렸을 때). 조건이 바뀌면 다시 20개부터.
+function compute(more) {
+  if (more !== true) SHOWN = PAGE;
+  save();
+  const err = validate();
+  if (err) { RES = { error: err }; renderResults(); return; }
+  const L = Object.assign({}, S.L);
+  const Q = {};
+  for (const t in S.Q) if (S.types.includes(t) && S.Q[t] != null) Q[t] = S.Q[t];
+  try {
+    // 칼로리 최소는 두지 않는다 (0). 최대는 입력이 없으면 무한대.
+    // 예산 안 모든 조합 중 최저가 순
+    RES = Algo.listCombos(ITEMS, S.types, S.R, 0, kmax(), L, S.cap, SHOWN, Q,
+      { pinned: S.pinned, excluded: S.excluded, timeLimitMs: 4000 });
+    CTX = { L, Q };
+  } catch (e) { RES = { error: "계산 중 오류가 났어요: " + e.message }; }
+  renderResults();
+}
+function loadMore() {
+  if (!RES || !RES.combos || RES.combos.length < SHOWN || SHOWN >= MAX_SHOWN || loadMore.busy) return;
+  loadMore.busy = true; SHOWN += PAGE;
+  setTimeout(() => { compute(true); loadMore.busy = false; }, 0);
+}
+function validate() {
+  if (S.R == null || S.R === "" || Number.isNaN(S.R)) return "한 끼 단백질 목표를 넣어 주세요. '내 정보'에 성별·나이·키·체중을 넣으면 근거 있는 값으로 계산해 드려요.";
+  if (!(S.R >= 1 && S.R <= 300)) return "단백질은 1~300g 사이로 정해 주세요.";
+  if (S.b != null && !(S.b >= 1 && S.b <= 5000)) return "칼로리 최대는 1~5,000kcal 사이로 넣거나 비워 두세요.";
+  if (!S.types.length && !S.pinned.length) return "먹을 종류를 하나 이상 골라 주세요.";
+  return "";
+}
+
+// ================= 찾기 탭 =================
+// 목표 칩: 내 정보가 있을 때만 목표 3개(각각 근거 있음)
+function presetList() {
+  if (!profileOk(S.profile)) return [];
+  return Object.keys(GOALS).map((k) => { const pl = plan(k); return { id: k, name: `${GOALS[k].name} ${pl.R}g`, R: pl.R, b: pl.b }; });
+}
+function viewFind() {
+  const presetBtns = presetList().map((p) => `<button type="button" class="chip" data-preset="${p.id}" aria-pressed="${p.R === S.R && p.b === S.b}">${esc(p.name)}</button>`).join("");
+  const welcome = !S.welcomed && !profileOk(S.profile) ? `<div class="card welcome" style="margin-bottom:12px"><p>성별·나이·키·체중을 넣으면 한국인 영양소 섭취기준이 쓰는 식으로 한 끼 단백질을 계산해 드려요. 아래 단백질 칸에 직접 넣어도 돼요.</p>
+    <div style="display:flex;gap:6px"><button class="btn primary" data-go="me">내 정보 넣기</button><button class="btn" data-act="dismiss-welcome" aria-label="닫기">닫기</button></div></div>` : "";
+  return `${welcome}
+  <section class="card goal" aria-label="한 끼 목표">
+    <div class="chips" id="presets">${presetBtns}<button type="button" class="chip" data-sheet="evidence">ⓘ 기준 근거</button></div>
+    <div class="row"><span>단백질</span><div><div class="stepper"><button type="button" data-step="R" data-d="-5" aria-label="단백질 5g 줄이기">−</button>
+      <input id="in-R" type="number" inputmode="numeric" value="${S.R == null || Number.isNaN(S.R) ? "" : S.R}" placeholder="예: 30" aria-label="단백질 g"><button type="button" data-step="R" data-d="5" aria-label="단백질 5g 늘리기">+</button></div><span class="unit">g 이상</span></div></div>
+    <div class="row"><span>칼로리</span><div class="kcal-row"><input id="in-b" type="number" inputmode="numeric" value="${S.b == null ? "" : S.b}" placeholder="상관없음" aria-label="칼로리 최대" style="width:96px"><span class="unit">kcal 이하</span>
+      ${S.b != null ? `<button type="button" class="linkbtn" data-act="clear-kmax" style="font-size:.8rem">지우기</button>` : ""}</div></div>
+    <div class="row"><span>예산</span><div class="budget"><div class="budget-top"><b id="cap-val">${won(S.cap)}원</b><span class="muted" style="font-size:.78rem">이하</span></div>
+      <input id="in-cap" type="range" min="2000" max="30000" step="500" value="${S.cap}" aria-label="예산"></div></div>
+  </section>
+  <div class="chips filters" id="filters"></div>
+  <div id="results"></div>`;
+}
+function renderFilters() {
+  const el = $("filters"); if (!el) return;
+  const all = S.types.length === ALL_TYPES.length;
+  const meal = GROUPS[0].types.every((t) => S.types.includes(t)) && S.types.length === GROUPS[0].types.length;
+  const snack = GROUPS[1].types.every((t) => S.types.includes(t)) && S.types.length === GROUPS[1].types.length;
+  const typeLabel = all ? "전체 종류" : meal ? "식사만" : snack ? "간식·음료만" : `${S.types.length}개 종류`;
+  const qn = Object.keys(S.Q).filter((t) => S.Q[t] != null && S.types.includes(t)).length;
+  const ln = ["carbMin", "carbMax", "fatMax", "sugarMax", "naMax"].filter((k) => S.L[k] != null).length;
+  el.innerHTML = `
+    <button type="button" class="chip ${all && !qn ? "" : "on"}" data-sheet="types">${typeLabel}${qn ? ` · 개수 ${qn}` : ""} ▾</button>
+    <button type="button" class="chip ${ln ? "on" : ""}" data-sheet="nutri">영양 조건${ln ? ` <span class="count">${ln}</span>` : ""} ▾</button>
+    <button type="button" class="chip ${S.pinned.length ? "on" : ""}" data-sheet="pin">꼭 넣기${S.pinned.length ? ` <span class="count">${S.pinned.length}</span>` : ""}</button>
+    ${S.excluded.length ? `<button type="button" class="chip" data-sheet="excluded">뺀 상품 <span class="count">${S.excluded.length}</span></button>` : ""}`;
+}
+// 조합은 최저가 순 하나로만 보여준다 (탐색 결과 순서 그대로)
+function sortedCombos() {
+  return RES.combos.map((c, i) => ({ c, i }));
+}
+function ringSVG(val, target) {
+  const r = 30, c = 2 * Math.PI * r, f = Math.min(1, val / target);
+  return `<div class="ring" aria-label="단백질 ${g1(val)}g, 목표 ${target}g"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="${r}" fill="none" stroke="var(--surface2)" stroke-width="7"/>
+    <circle cx="36" cy="36" r="${r}" fill="none" stroke="var(--prot)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(f * c).toFixed(1)} ${c.toFixed(1)}"/></svg>
+    <div class="val"><b>${Math.round(val)}g</b><span>/ ${target}g</span></div></div>`;
+}
+function comboCard(c, rank, best, opts) {
+  opts = opts || {};
+  const s = sums(c.items);
+  const ck = s.carb * 4, pk = s.pr * 4, fk = s.fat * 9, tot = ck + pk + fk || 1;
+  const pct = (x) => Math.round((x / tot) * 100);
+  const ev = c.items.some((it) => it.event);
+  const idx = c.items.map((it, i) => i).sort((x, y) => c.items[y].price - c.items[x].price);
+  const items = idx.map((i) => {
+    const it = c.items[i], alts = (c.alts && c.alts[i]) || [];
+    const pinned = S.pinned.includes(it.id);
+    return `<button type="button" class="item" data-item="${esc(it.id)}" data-ci="${opts.ci != null ? opts.ci : ""}" data-slot="${i}">${tbadge(it.type)}
+      <span><span class="nm">${esc(it.name)}</span><span class="meta">${pinned ? `<span class="pin-mark">꼭 넣음</span>` : ""}<span>단백질 ${g1(it.pr)}g</span><span>${Math.round(it.kr)}kcal</span>
+      ${evBadge(it)}${alts.length ? `<span class="alt">같은 가격 ${alts.length}개 더</span>` : ""}</span></span>
+      <span class="pr">${won(it.price)}</span></button>`;
+  }).join("");
+  const savedHit = S.saved.some((x) => x.sig === sig(c));
+  return `<li class="card combo ${best ? "best" : ""}">
+    <div class="chead"><div>
+      <div class="rankline">${opts.title ? `<span>${esc(opts.title)}</span>` : `<span class="num">${rank}위</span>`}${best ? `<span class="badge best">최저가</span>` : opts.diff ? `<span>+${won(opts.diff)}원</span>` : ""}${ev ? `<span class="badge ev">행사 포함</span>` : ""}</div>
+      <div class="price">${won(c.cost)}<small>원</small></div>
+      <div class="subline"><span class="num">${Math.round(s.kr)}kcal</span><span>단백질 1g당 <span class="num">${won(c.cost / s.pr)}</span>원</span><span>${c.items.length}개</span></div>
+    </div>${ringSVG(s.pr, opts.target || S.R)}</div>
+    <div class="macro"><div class="bar" role="img" aria-label="탄수화물 ${pct(ck)}%, 단백질 ${pct(pk)}%, 지방 ${pct(fk)}%">
+      <i style="width:${pct(ck)}%;background:var(--carb)"></i><i style="width:${pct(pk)}%;background:var(--prot)"></i><i style="width:${pct(fk)}%;background:var(--fat)"></i></div>
+      <div class="legend"><span style="--c:var(--carb)">탄수 ${Math.round(s.carb)}g</span><span style="--c:var(--prot)">단백질 ${g1(s.pr)}g</span><span style="--c:var(--fat)">지방 ${Math.round(s.fat)}g</span><span>당류 ${Math.round(s.sugar)}g · 나트륨 ${won(s.na)}mg</span></div></div>
+    <div class="items">${items}</div>
+    <div class="actions">${opts.savedId != null
+      ? `<button type="button" class="btn danger" data-act="unsave" data-id="${opts.savedId}">삭제</button>`
+      : `<button type="button" class="btn ${savedHit ? "on" : ""}" data-act="save" data-ci="${opts.ci}">${savedHit ? "저장됨" : "저장"}</button>`}
+      <button type="button" class="btn primary" data-act="cart" data-ci="${opts.ci != null ? opts.ci : ""}" data-sid="${opts.savedId != null ? opts.savedId : ""}">장보기 담기</button>
+      <button type="button" class="btn" data-act="share" data-ci="${opts.ci != null ? opts.ci : ""}" data-sid="${opts.savedId != null ? opts.savedId : ""}">공유</button></div>
+  </li>`;
+}
+function sig(c) { return c.items.map((it) => it.id).sort().join(","); }
+function renderResults() {
+  const el = $("results"); if (!el) return;
+  renderFilters();
+  if (!RES) { el.innerHTML = `<div class="skeleton" style="margin-top:22px"></div>`; return; }
+  if (RES.error) { el.innerHTML = `<div class="card empty" style="margin-top:22px"><h3>조건을 확인해 주세요</h3><p class="muted">${esc(RES.error)}</p>${S.R == null || Number.isNaN(S.R) ? `<button class="btn primary" data-go="me">내 정보 넣기</button>` : ""}</div>`; return; }
+  const n = RES.combos.length;
+  if (!n) {
+    el.innerHTML = `<div class="result-head"><h2>조합이 없어요</h2></div>
+      <div class="card empty"><h3>이 조건에 맞는 조합이 없어요</h3><ul>${RES.reasons.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
+        ${RES.cheapest ? `<button class="btn primary" data-act="set-cap" data-v="${Math.ceil(RES.cheapest / 500) * 500}">예산 ${won(Math.ceil(RES.cheapest / 500) * 500)}원으로</button>` : ""}
+        <button class="btn" data-act="widen">조건 넓히기</button></div></div>`;
+    return;
+  }
+  const min = Math.min(...RES.combos.map((c) => c.cost));
+  const list = sortedCombos();
+  el.innerHTML = `<div class="result-head"><h2>조합 <b>${n}개</b> · <span class="num">${won(min)}</span>원부터</h2>
+      <span class="muted" style="font-size:.75rem">${RES.time < 1000 ? Math.max(1, Math.round(RES.time)) + "ms" : (RES.time / 1000).toFixed(1) + "초"}</span></div>
+    <p class="qnote" style="margin:0 0 12px">예산 안의 모든 조합 중 가격이 싼 순서예요.</p>
+    ${RES.note ? `<p class="notice warn" style="margin:0 0 12px">${esc(RES.note)}</p>` : ""}
+    <ol class="combos">${list.map((x, r) => comboCard(x.c, r + 1, x.c.cost === min && r === 0, { ci: x.i, diff: x.c.cost - min })).join("")}</ol>
+    ${n < SHOWN ? `<p class="foot-note">예산 안의 조합은 이게 전부예요.</p>`
+      : SHOWN >= MAX_SHOWN ? `<p class="foot-note">${MAX_SHOWN}개까지만 보여줘요. 예산이나 종류를 좁혀 보세요.</p>`
+      : `<div id="more-sentinel"><button type="button" class="btn" data-act="more" style="width:100%">조합 ${PAGE}개 더 보기</button></div>`}
+    <p class="foot-note">같은 종류·같은 가격 상품만 다른 조합은 한 장으로 묶었어요. 상품을 누르면 바꿔 담을 수 있어요.</p>`;
+  // 목록 끝이 화면에 보이면 20개 더 불러오기
+  const sen = $("more-sentinel");
+  if (sen && "IntersectionObserver" in window) {
+    if (renderResults.io) renderResults.io.disconnect();
+    renderResults.io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) loadMore(); }, { rootMargin: "200px" });
+    renderResults.io.observe(sen);
+  }
+}
+
+// ================= 저장·장보기·내 정보 =================
+function snapshot(c) {
+  return { sig: sig(c), at: Date.now(), cost: c.cost, R: S.R,
+    items: c.items.map((it) => ({ id: it.id, name: it.name, price: it.price, type: it.type, event: it.event, pr: it.pr, kr: it.kr,
+      carb: it.carb, fat: it.fat, sugar: it.sugar, na: it.na, p: it.p, k: it.k, grade: it.grade })) };
+}
+function viewSaved() {
+  if (!S.saved.length) return `<div class="card empty"><h3>저장한 조합이 없어요</h3><p class="muted">찾기에서 마음에 드는 조합의 '저장'을 누르면 여기에 모여요.</p><button class="btn primary" data-go="find">조합 찾으러 가기</button></div>`;
+  return `<div class="result-head" style="margin-top:4px"><h2>저장한 조합 <b>${S.saved.length}개</b></h2></div>
+    <ol class="combos">${S.saved.map((x) => {
+      const d = new Date(x.at);
+      const stale = x.items.some((it) => !BY_ID.has(it.id) || BY_ID.get(it.id).price !== it.price);
+      return comboCard({ cost: x.cost, items: x.items, alts: [] }, 0, false, { savedId: x.at, title: `${d.getMonth() + 1}/${d.getDate()} 저장${stale ? " · 가격·행사가 바뀐 상품 있음" : ""}`, target: x.R });
+    }).join("")}</ol><p class="foot-note">저장한 조합은 이 기기의 브라우저에만 남아요.</p>`;
+}
+function zoneOf(x) { const c = x.cat || (BY_ID.get(x.id) || {}).cat; return ZONES.includes(c) ? c : "기타"; }
+function viewCart() {
+  if (!S.cart.length) return `<div class="card empty"><h3>장보기 목록이 비었어요</h3><p class="muted">조합에서 '장보기 담기'를 누르면 CU 상품 분류별로 정리해 드려요.</p><button class="btn primary" data-go="find">조합 찾으러 가기</button></div>`;
+  const done = S.cart.filter((x) => x.done).length;
+  const total = S.cart.reduce((a, x) => a + x.price * x.qty, 0);
+  const zones = ZONES.concat(["기타"]);
+  const body = zones.map((z) => {
+    const its = S.cart.filter((x) => zoneOf(x) === z);
+    if (!its.length) return "";
+    return `<div class="zone"><h3>${z}</h3>${its.map((x) => `<label class="citem ${x.done ? "done" : ""}"><input type="checkbox" data-cart="${esc(x.id)}" ${x.done ? "checked" : ""}>
+      <span><span class="nm">${esc(x.name)}</span>${x.qty > 1 ? ` <b>×${x.qty}</b>` : ""}<br><span class="muted" style="font-size:.75rem">${esc(x.type)}${x.event ? ` · ${esc(evText(x.event))}` : ""}</span></span>
+      <span class="num">${won(x.price * x.qty)}</span></label>`).join("")}</div>`;
+  }).join("");
+  return `<div class="card stack">
+    <div class="budget-top"><h2 style="font-size:1.05rem">장보기 <span class="muted" style="font-weight:400">${done}/${S.cart.length}</span></h2><b class="num">${won(total)}원</b></div>
+    <div class="progress"><i style="width:${(done / S.cart.length) * 100}%"></i></div>
+    ${body}
+    <div class="actions" style="grid-template-columns:1fr 1fr"><button class="btn" data-act="cart-share">목록 복사</button><button class="btn danger" data-act="cart-clear">${done === S.cart.length ? "다 샀어요, 비우기" : "목록 비우기"}</button></div>
+  </div><p class="foot-note">분류는 CU 홈페이지의 상품 분류예요. 실제 진열 위치는 매장마다 다를 수 있어요. 행사 상품은 표시된 개수만큼 담아야 행사 가격이 돼요.</p>`;
+}
+const seg = (key, opts, cur) => `<div class="seg2">${opts.map(([v, l]) => `<button type="button" data-pf="${key}" data-v="${v}" aria-pressed="${String(cur) === String(v)}">${l}</button>`).join("")}</div>`;
+function planOut() {
+  const pl = plan(), p = S.profile;
+  if (!pl.ok) {
+    const miss = [!p.sex && "성별", !(p.age >= 19 && p.age <= 100) && "나이(19~100세)", !(p.height >= 120 && p.height <= 220) && "키(120~220cm)", !(p.weight >= 30 && p.weight <= 200) && "체중(30~200kg)"].filter(Boolean);
+    return `<p class="notice" style="margin:0">${miss.join(", ")}을 넣으면 계산돼요. 식이 성인용이라 19세 이상만 계산해요.</p>`;
+  }
+  const g = pl.g;
+  return `<div style="display:flex;align-items:end;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div><div class="muted" style="font-size:.8rem">한 끼 목표</div><div class="big-num">단백질 ${pl.R}g</div><div class="muted" style="font-size:.85rem">${pl.b != null ? `칼로리 ${won(pl.b)}kcal 이하` : "칼로리 상관없음"}</div></div>
+      <button class="btn primary" data-act="use-target">이 목표로 찾기</button></div>
+    <table class="nut"><tbody>
+      <tr><td>하루 에너지 필요추정량</td><td>${won(pl.base)}kcal</td></tr>
+      ${g.deficit ? `<tr><td>감량용 하루 칼로리 (−${g.deficit})</td><td>${won(pl.dayKcal)}kcal</td></tr>` : ""}
+      <tr><td>하루 단백질 (${p.weight}kg × ${g.f}g)</td><td>${g1(pl.dayP)}g</td></tr>
+      <tr><td>한 끼 단백질 (÷ ${pl.meals}끼)</td><td>${pl.R}g</td></tr>
+      ${g.deficit ? `<tr><td>한 끼 칼로리 최대 (÷ ${pl.meals}끼)</td><td>${won(pl.b)}kcal</td></tr>` : ""}
+      <tr><td>참고: 1회 권장 (0.25g/kg)</td><td>${g1(pl.dose)}g</td></tr>
+    </tbody></table>
+    <p class="qnote" style="margin:0">${esc(g.why)}.${g.deficit ? "" : " 칼로리는 제한하지 않아요 (체중 줄이기만 칼로리 최대를 걸어요)."}${pl.R < pl.dose ? ` 한 끼 목표가 1회 권장량(${g1(pl.dose)}g)보다 적어요. 끼니 수를 줄이거나 목표를 바꿔 보세요.` : ""}</p>
+    <p class="qnote" style="margin:0">출처<br>${srcLinks(["iom", "iomEq"].concat(g.src))}</p>`;
+}
+function viewMe() {
+  const p = S.profile;
+  const num = (id, label, unit, v, ph) => `<div class="field"><label for="pf-${id}">${label}</label><div><input id="pf-${id}" data-pfnum="${id}" type="number" inputmode="decimal" value="${v == null ? "" : v}" placeholder="${ph}"><span class="unit">${unit}</span></div></div>`;
+  return `<div class="stack">
+    <section class="card stack" aria-label="한 끼 목표 계산">
+      <h2 style="font-size:1.05rem">한 끼 목표 계산</h2>
+      <div><div class="section-title" style="margin-bottom:6px">성별</div>${seg("sex", [["m", "남성"], ["f", "여성"]], p.sex)}</div>
+      ${num("age", "나이", "세", p.age, "예: 22")}${num("height", "키", "cm", p.height, "예: 175")}${num("weight", "체중", "kg", p.weight, "예: 70")}
+      <div><div class="section-title" style="margin-bottom:6px">활동 수준</div>${seg("act", Object.entries(ACT).map(([k, v]) => [k, v[0]]), p.act)}
+        <p class="qnote" style="margin:4px 0 0">${esc(ACT[p.act][1])}. 한국인 영양소 섭취기준은 한국인을 '저활동적'으로 보고 계산해요.</p></div>
+      <div><div class="section-title" style="margin-bottom:6px">목표</div>${seg("goal", Object.entries(GOALS).map(([k, g]) => [k, g.name]), p.goal)}</div>
+      <div><div class="section-title" style="margin-bottom:6px">하루 끼니</div>${seg("meals", [[2, "2끼"], [3, "3끼"], [4, "4끼"]], p.meals)}</div>
+      <div id="pf-out" class="stack">${planOut()}</div>
+      <button class="btn" data-sheet="evidence">모든 기준값의 근거 보기</button>
+      <p class="foot-note" style="margin:0">일반 성인용 참고값이에요. 신장 질환이 있거나 식단 관리를 받고 있다면 전문가와 상의하세요.</p>
+    </section>
+    <section class="card stack" aria-label="상품 관리">
+      <h2 style="font-size:1.05rem">상품 관리</h2>
+      <button class="btn" data-sheet="pin" style="justify-content:space-between">꼭 넣을 상품 <span class="num">${S.pinned.length}개</span></button>
+      <button class="btn" data-sheet="excluded" style="justify-content:space-between">뺀 상품 (안 먹는 것) <span class="num">${S.excluded.length}개</span></button>
+    </section>
+    <section class="card stack" aria-label="데이터와 계산 방법">
+      <h2 style="font-size:1.05rem">데이터와 계산 방법</h2>
+      <p style="margin:0;font-size:.88rem">CU 상품 ${won(productCount())}개의 가격(${esc(META.collected || "")} 수집)에 식약처 가공식품 영양성분 DB를 제품명으로 맞췄어요. 묶음 상품, 값이 이상한 상품, 조미료, 가스레인지로 조리해야 하는 상품은 뺐어요.</p>
+      <p style="margin:0;font-size:.88rem">조합은 분기 한정법(Branch &amp; Bound)으로 찾아요. 상품마다 넣을지 말지를 나눠 보되, 지금까지 찾은 조합보다 비싸질 수밖에 없는 갈래는 바로 버려서 1,300개 상품에서도 1초 안에 예산 안 최저가 조합을 ${PAGE}개씩 찾아요.</p>
+      <p style="margin:0;font-size:.88rem">1+1·2+1 행사 표시와 정가는 CU 홈페이지에서 가져왔어요. 행사 상품은 1개만 사거나 행사대로 사는 것 중 하나를 골라요. 1+1은 1개(1개 값) 또는 2개(1개 값), 2+1은 1개(1개 값), 2개(2개 값), 3개(2개 값)예요. 값이 같아도 개수가 다르면 다른 조합으로 보여줘요. 행사는 보통 매월 바뀌어요.</p>
+      <button class="btn danger" data-act="reset">저장한 설정 모두 지우기</button>
+    </section></div>`;
+}
+
+// ================= 시트 =================
+function openSheet(kind, arg) {
+  const root = $("sheet-root");
+  let body = "";
+  if (kind === "types") body = sheetTypes();
+  else if (kind === "nutri") body = sheetNutri();
+  else if (kind === "pin") body = sheetPin();
+  else if (kind === "excluded") body = sheetExcluded();
+  else if (kind === "item") body = sheetItem(arg);
+  else if (kind === "evidence") body = sheetEvidence();
+  root.innerHTML = `<div class="scrim" data-act="close-sheet"><div class="sheet" role="dialog" aria-modal="true" data-kind="${kind}"><div class="grab"></div>${body}</div></div>`;
+  root.dataset.kind = kind; root.dataset.arg = arg ? JSON.stringify(arg) : "";
+  const f = root.querySelector("[autofocus]"); if (f) f.focus();
+}
+function refreshSheet() { const r = $("sheet-root"); if (r.innerHTML) { const k = r.dataset.kind, a = r.dataset.arg ? JSON.parse(r.dataset.arg) : null; openSheet(k, a); } }
+function closeSheet() { $("sheet-root").innerHTML = ""; }
+function head(title) { return `<div class="sheet-head"><h2>${title}</h2><button class="x" data-act="close-sheet" aria-label="닫기">✕</button></div>`; }
+function countOf(t) { return ITEMS.filter((it) => it.type === t).length; }
+function sheetTypes() {
+  const grp = GROUPS.map((g, gi) => {
+    const on = g.types.filter((t) => S.types.includes(t)).length;
+    return `<div><div class="grp-head"><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-grp="${gi}" ${on === g.types.length ? "checked" : ""}> <b>${g.name}</b></label><span class="qnote">개수 (선택)</span></div>
+      ${g.types.map((t) => {
+        const q = S.Q[t];
+        return `<div class="trow"><label><input type="checkbox" data-type="${esc(t)}" ${S.types.includes(t) ? "checked" : ""}>${tbadge(t)}<span>${esc(t)} <span class="cnt">${countOf(t)}</span></span></label>
+          <div class="stepper sm"><button type="button" data-q="${esc(t)}" data-d="-1" aria-label="${esc(t)} 개수 줄이기">−</button><input readonly value="${q == null ? "–" : q}" aria-label="${esc(t)} 개수"><button type="button" data-q="${esc(t)}" data-d="1" aria-label="${esc(t)} 개수 늘리기">+</button></div></div>`;
+      }).join("")}</div>`;
+  }).join("");
+  return `${head("먹을 종류")}
+    <div class="chips" style="margin:0"><button class="chip" data-tset="all">전체</button><button class="chip" data-tset="meal">식사만</button><button class="chip" data-tset="snack">간식·음료만</button><button class="chip" data-tset="clearq">개수 모두 지우기</button></div>
+    <p class="qnote" style="margin:0">개수를 정하면 그 종류에서 딱 그만큼 담은 조합만 보여줘요. '–'는 상관없음이에요. 1+1·2+1 행사 묶음은 1개로 세요.</p>
+    ${grp}<button class="btn primary" data-act="close-sheet">결과 보기</button>`;
+}
+function sheetNutri() {
+  const f = (id, label, unit, v) => `<div class="field"><label for="nt-${id}">${label}</label><div><input id="nt-${id}" data-lim="${id}" type="number" inputmode="numeric" min="0" value="${v == null ? "" : v}" placeholder="상관없음"><span class="unit">${unit}</span></div></div>`;
+  return `${head("영양 조건")}
+    <p class="qnote" style="margin:0">필요한 사람만 쓰는 추가 조건이에요. 조합 전체의 합계에 적용되고, 비우면 상관없어요.</p>
+    ${f("carbMin", "탄수화물 최소", "g", S.L.carbMin)}${f("carbMax", "탄수화물 최대", "g", S.L.carbMax)}${f("fatMax", "지방 최대", "g", S.L.fatMax)}${f("sugarMax", "당류 최대", "g", S.L.sugarMax)}${f("naMax", "나트륨 최대", "mg", S.L.naMax)}
+    <div class="actions" style="grid-template-columns:1fr 1fr"><button class="btn" data-act="clear-lim">모두 지우기</button><button class="btn primary" data-act="close-sheet">결과 보기</button></div>`;
+}
+// 기준값마다 근거와 확인 상태. ok: 출처에서 값 확인 / part: 일부만 확인 / none: 근거 없음(팀 결정 또는 화면 기본값)
+const EVIDENCE = [
+  ["하루 칼로리", "미국 IOM 에너지 필요추정량 식 (성별·나이·키·체중·활동 계수)", "ok", ["iom", "iomEq"],
+    "남: 662 − 9.53×나이 + 활동계수×(15.91×체중 + 539.6×키m), 여: 354 − 6.91×나이 + 활동계수×(9.36×체중 + 726×키m). 활동계수 남 1.0/1.11/1.25/1.48, 여 1.0/1.12/1.27/1.45. 2025 개정판에서 식이 바뀌었는지는 원문 미확인."],
+  ["건강 유지 단백질", "하루 0.91g/kg", "part", ["kdriP", "kdri25"], "2020 섭취기준 권장섭취량. 2025 개정판의 성인 값은 원문 미확인."],
+  ["근육 늘리기 단백질", "하루 1.4g/kg", "ok", ["issn"], "운동하는 사람 권장 범위 1.4~2.0g/kg 중 하한. 최저가를 찾는 문제라 범위 안에서 가장 적은 값을 골랐어요 (팀 선택)."],
+  ["체중 줄이기 단백질", "하루 1.6g/kg", "ok", ["hector"], "감량 중 1.6~2.4g/kg 중 하한. 운동선수 대상 연구예요."],
+  ["체중 줄이기 칼로리 최대", "(필요추정량 − 500kcal) ÷ 끼니 수", "ok", ["murphy"], "근육을 지키며 감량할 때 권한 '중간 정도 적자' 약 500kcal. 근육 늘리기·건강 유지는 칼로리를 제한하지 않아요."],
+  ["끼니로 나누기", "하루 목표 ÷ 끼니 수 (고르게)", "ok", ["issn"], "ISSN은 하루 단백질을 3~4시간 간격으로 고르게 나누라고 권해요. 1회 0.25g/kg은 참고로 보여줘요."],
+  ["칼로리 최소 · 입력이 없을 때", "칼로리 최소 없음, 최대는 비우면 상관없음", "none", [], "팀 결정. 단백질 목표에 집중하고, 사용자가 넣은 조건만 적용해요."],
+  ["내 정보가 없을 때", "단백질 목표 없음 (직접 넣거나 내 정보로 계산)", "none", [], "근거 없는 기본값을 두지 않으려고 비워 둬요."],
+  ["가격 · 1+1·2+1 행사", "CU 홈페이지의 정가와 행사 표시", "ok", ["cu"], "1+1은 정가 1개 값에 2개, 2+1은 정가 2개 값에 3개 (CU 행사 규칙). 행사 상품은 적게 사는 경우도 둬요: 1+1은 1개·2개, 2+1은 1개·2개·3개. 같은 상품은 그중 하나만 조합에 들어가요 (팀 결정)."],
+  ["예산 기본 10,000원 · 범위 2,000~30,000원", "화면 기본값", "none", [], "근거 없음. 사용자가 바로 바꾸는 값이에요."],
+  ["조합 보여주기", "처음 20개, 아래로 내리면 20개씩 더 (최대 200개)", "none", [], "근거 없음. 화면 기본값이에요."],
+];
+const EV_TAG = { ok: ["확인됨", "var(--prot)"], part: ["일부 확인", "var(--carb)"], none: ["근거 없음·팀 결정", "var(--muted)"] };
+function sheetEvidence() {
+  return `${head("기준값과 근거")}
+    <p class="qnote" style="margin:0">앱이 쓰는 모든 숫자와 그 출처예요. '근거 없음'은 팀이 정했거나 사용자가 바꾸는 값이에요.</p>
+    <div class="list">${EVIDENCE.map(([k, v, st, src, note]) => `<div class="ev-row"><div class="ev-top"><b>${esc(k)}</b><span class="badge" style="color:${EV_TAG[st][1]};border-color:currentColor">${EV_TAG[st][0]}</span></div>
+      <div class="ev-val">${esc(v)}</div><div class="qnote">${esc(note)}</div>${src.length ? `<div class="qnote ev-src">${srcLinks(src)}</div>` : ""}</div>`).join("")}</div>
+    <button class="btn primary" data-act="close-sheet">닫기</button>`;
+}
+function itemRow(it, btn) {
+  return `<div class="lrow">${tbadge(it.type)}<div><div class="nm">${esc(it.name)}</div><div class="meta">${won(it.price)}원 · 단백질 ${g1(it.pr)}g · ${Math.round(it.kr)}kcal${it.event ? ` · ${esc(it.event)}` : it.promo ? ` · ${esc(it.promo)} 중 ${it.u}개` : ""}</div></div>${btn}</div>`;
+}
+function sheetPin() {
+  const cur = S.pinned.map((id) => BY_ID.get(id)).filter(Boolean);
+  return `${head("꼭 넣을 상품")}
+    <p class="qnote" style="margin:0">먹고 싶은 상품이나 이미 가진 상품을 넣으면, 그걸 포함해서 나머지를 가장 싸게 채워요. 고른 종류와 상관없이 들어가요.</p>
+    ${cur.length ? `<div class="list">${cur.map((it) => itemRow(it, `<button class="btn" data-unpin="${esc(it.id)}">빼기</button>`)).join("")}</div>` : ""}
+    <input class="search" id="pin-q" type="search" placeholder="상품 이름 검색 (예: 닭가슴살, 바나나우유)" autofocus>
+    <div class="list" id="pin-results"></div>`;
+}
+function pinSearch(q) {
+  const el = $("pin-results"); if (!el) return;
+  q = q.trim();
+  if (!q) { el.innerHTML = `<p class="qnote">단백질 많은 상품 추천</p>` + topProtein().map((it) => itemRow(it, pinBtn(it))).join(""); return; }
+  const words = q.split(/\s+/);
+  const inName = (it) => words.every((w) => it.name.includes(w));
+  const hits = ITEMS.filter((it) => words.every((w) => it.name.includes(w) || it.type.includes(w)))
+    .sort((a, b) => inName(b) - inName(a) || b.pr - a.pr).slice(0, 30); // 이름에 다 들어간 것 먼저, 그다음 단백질 많은 순
+  el.innerHTML = hits.length ? hits.map((it) => itemRow(it, pinBtn(it))).join("") : `<p class="qnote">'${esc(q)}'에 맞는 상품이 없어요.</p>`;
+}
+function topProtein() { return ITEMS.filter((it) => !S.excluded.includes(it.id)).slice().sort((a, b) => b.pr / b.price - a.pr / a.price).slice(0, 10); }
+function pinBtn(it) { const on = S.pinned.includes(it.id); return `<button class="btn ${on ? "on" : ""}" data-${on ? "unpin" : "pin"}="${esc(it.id)}">${on ? "넣음" : "넣기"}</button>`; }
+function sheetExcluded() {
+  const cur = S.excluded.map((id) => BY_ID.get(id)).filter(Boolean);
+  return `${head("뺀 상품")}
+    <p class="qnote" style="margin:0">안 먹는 상품이나 매장에 없던 상품이에요. 조합에 다시 나오지 않아요.</p>
+    ${cur.length ? `<div class="list">${cur.map((it) => itemRow(it, `<button class="btn" data-unexclude="${esc(it.id)}">되살리기</button>`)).join("")}</div>
+      <button class="btn" data-act="clear-excluded">모두 되살리기</button>` : `<p class="notice">뺀 상품이 없어요. 조합에서 상품을 누르면 뺄 수 있어요.</p>`}`;
+}
+function sheetItem(arg) {
+  const it = BY_ID.get(arg.id) || (arg.snap || null);
+  if (!it) return head("상품");
+  const combo = arg.ci != null && RES && RES.combos ? RES.combos[arg.ci] : null;
+  const alts = combo && combo.alts ? combo.alts[arg.slot] || [] : [];
+  const pinned = S.pinned.includes(it.id);
+  const rows = [["단백질", g1(it.pr) + "g"], ["칼로리", Math.round(it.kr) + "kcal"], ["탄수화물", g1(it.carb) + "g"], ["당류", g1(it.sugar) + "g"], ["지방", g1(it.fat) + "g"], ["나트륨", won(it.na) + "mg"], ["단백질 1g당 가격", it.pr > 0 ? won(it.price / it.pr) + "원" : "–"]];
+  return `${head(esc(it.name))}
+    <div style="display:flex;gap:10px;align-items:center">${tbadge(it.type)}<div><div class="price" style="font-size:1.4rem">${won(it.price)}<small>원</small></div><div class="muted" style="font-size:.8rem">${esc(it.type)}${it.event ? ` · ${esc(evText(it.event))}` : ""}</div></div></div>
+    ${it.promo ? `<p class="notice" style="margin:0">${esc(promoText(it))}</p>` : ""}
+    <table class="nut"><tbody>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</tbody></table>
+    <p class="qnote" style="margin:0">영양정보 정확도: ${esc(GRADE_TEXT[it.grade] || it.grade || "–")}${it.event ? ". 행사 묶음 전체 기준 값이에요." : ""}</p>
+    ${alts.length ? `<div><div class="section-title" style="margin-bottom:4px">같은 가격으로 바꿔 담기 (${alts.length})</div><div class="list">${alts.map((a) => itemRow(a, `<button class="btn" data-swap="${esc(a.id)}" data-ci="${arg.ci}" data-slot="${arg.slot}">바꾸기</button>`)).join("")}</div>
+      <p class="qnote" style="margin:4px 0 0">바꿔도 조건(단백질·칼로리·영양 조건)을 지키는 상품만 보여줘요.</p></div>` : ""}
+    ${BY_ID.has(it.id) ? `<div class="actions" style="grid-template-columns:1fr 1fr"><button class="btn ${pinned ? "on" : ""}" data-${pinned ? "unpin" : "pin"}="${esc(it.id)}">${pinned ? "꼭 넣기 해제" : "꼭 넣기"}</button>
+      <button class="btn danger" data-exclude="${esc(it.id)}">이 상품 빼기</button></div>` : ""}`;
+}
+
+// ================= 공유 =================
+function shareText(items, cost) {
+  const s = sums(items);
+  return `편의점 단백질 조합 (CU ${META.collected} 가격)\n` + items.map((it) => `- ${it.name} ${won(it.price)}원`).join("\n") +
+    `\n합계 ${won(cost)}원 · 단백질 ${g1(s.pr)}g · ${Math.round(s.kr)}kcal`;
+}
+async function copy(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg); }
+  catch (e) {
+    $("sheet-root").innerHTML = `<div class="scrim" data-act="close-sheet"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${head("복사할 내용")}
+      <textarea class="search" style="height:180px;padding:10px" readonly id="copy-ta">${esc(text)}</textarea><p class="qnote">길게 눌러 복사하세요.</p></div></div>`;
+    const ta = $("copy-ta"); ta.focus(); ta.select();
+  }
+}
+
+// ================= 화면 전환 =================
+function render() {
+  document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === TAB ? "page" : "false"));
+  const v = $("view");
+  if (TAB === "find") { v.innerHTML = viewFind(); renderResults(); }
+  else if (TAB === "saved") v.innerHTML = viewSaved();
+  else if (TAB === "cart") v.innerHTML = viewCart();
+  else v.innerHTML = viewMe();
+  const ds = $("dot-saved"), dc = $("dot-cart");
+  ds.hidden = !S.saved.length; ds.textContent = S.saved.length;
+  const left = S.cart.filter((x) => !x.done).length;
+  dc.hidden = !left; dc.textContent = left;
+}
+function go(tab) { TAB = tab; render(); window.scrollTo(0, 0); }
+function comboFrom(ci, sid) {
+  if (sid) { const x = S.saved.find((s) => String(s.at) === String(sid)); return x ? { cost: x.cost, items: x.items } : null; }
+  return RES && RES.combos ? RES.combos[ci] : null;
+}
+
+// ================= 이벤트 =================
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, [data-act], .scrim");
+  if (!t) return;
+  const d = t.dataset;
+  if (t.classList.contains("scrim") && e.target !== t) return; // 시트 안쪽 클릭
+  if (d.tab) return go(d.tab);
+  if (d.go) { closeSheet(); return go(d.go); }
+  if (d.preset) {
+    const p = presetList().find((x) => x.id === d.preset); if (!p) return;
+    if (GOALS[d.preset]) S.profile.goal = d.preset;
+    Object.assign(S, { R: p.R, b: p.b }); return render(), compute();
+  }
+  if (d.pf) {
+    const k = d.pf, v = d.v;
+    S.profile[k] = k === "meals" ? Number(v) : v;
+    save(); return render();
+  }
+  if (d.step) { S[d.step] = Math.max(5, (S[d.step] || 0) + Number(d.d)); $("in-" + d.step).value = S[d.step]; syncPresets(); return schedule(); }
+  if (d.toggle) { S[d.toggle] = !S[d.toggle]; return compute(); }
+  if (d.sheet) return openSheet(d.sheet);
+  if (d.item) return openSheet("item", { id: d.item, ci: d.ci === "" ? null : Number(d.ci), slot: Number(d.slot), snap: findSnap(d.item) });
+  if (d.q) {
+    const cur = S.Q[d.q], n = cur == null ? (Number(d.d) > 0 ? 1 : null) : cur + Number(d.d);
+    S.Q[d.q] = n == null || n < 1 ? null : Math.min(n, 10);
+    if (S.Q[d.q] != null && !S.types.includes(d.q)) S.types.push(d.q);
+    refreshSheet(); return compute();
+  }
+  if (d.tset) {
+    if (d.tset === "all") S.types = ALL_TYPES.slice();
+    else if (d.tset === "meal") S.types = GROUPS[0].types.slice();
+    else if (d.tset === "snack") S.types = GROUPS[1].types.slice();
+    else S.Q = {};
+    refreshSheet(); return compute();
+  }
+  if (d.pin) { // 같은 상품은 한 행만: 1개 행과 행사 묶음 행 중 고른 것만 남긴다
+    const ids = groupIds(d.pin);
+    S.pinned = S.pinned.filter((x) => !ids.includes(x)).concat(d.pin); S.excluded = S.excluded.filter((x) => !ids.includes(x)); toast("꼭 넣을 상품에 넣었어요"); refreshPin(); return compute(); }
+  if (d.unpin) { S.pinned = S.pinned.filter((x) => x !== d.unpin); refreshPin(); return compute(); }
+  if (d.exclude) { // 같은 상품의 1개 행·행사 묶음 행을 함께 뺀다
+    const ids = groupIds(d.exclude);
+    S.excluded = [...new Set(S.excluded.concat(ids))]; S.pinned = S.pinned.filter((x) => !ids.includes(x)); closeSheet(); toast("이 상품은 이제 안 나와요. 내 정보에서 되살릴 수 있어요"); compute(); return TAB === "find" ? null : render(); }
+  if (d.unexclude) { const ids = groupIds(d.unexclude); S.excluded = S.excluded.filter((x) => !ids.includes(x)); refreshSheet(); compute(); return TAB === "me" ? render() : null; }
+  if (d.swap) {
+    const c = RES.combos[Number(d.ci)], slot = Number(d.slot), nw = BY_ID.get(d.swap);
+    c.items = c.items.slice(); c.items[slot] = nw;
+    Algo.addAlternatives(c, CTX_cand(), S.R, 0, kmax(), CTX.L, CTX.Q, new Set(S.pinned));
+    closeSheet(); renderResults(); return toast("바꿔 담았어요");
+  }
+  const act = d.act;
+  if (!act) return;
+  if (act === "close-sheet") return closeSheet();
+  if (act === "dismiss-welcome") { S.welcomed = true; save(); return render(); }
+  if (act === "save") {
+    const c = RES.combos[Number(d.ci)], sg = sig(c);
+    if (S.saved.some((x) => x.sig === sg)) { S.saved = S.saved.filter((x) => x.sig !== sg); toast("저장을 취소했어요"); }
+    else { S.saved.unshift(snapshot(c)); toast("저장했어요"); }
+    save(); renderResults(); return render();
+  }
+  if (act === "unsave") { S.saved = S.saved.filter((x) => String(x.at) !== String(d.id)); save(); return render(); }
+  if (act === "cart") {
+    const c = comboFrom(Number(d.ci), d.sid); if (!c) return;
+    c.items.forEach((it) => {
+      const ex = S.cart.find((x) => x.id === it.id);
+      if (ex) { ex.qty += 1; ex.done = false; }
+      else S.cart.push({ id: it.id, name: it.name, price: it.price, type: it.type, cat: it.cat || (BY_ID.get(it.id) || {}).cat, event: it.event, qty: 1, done: false });
+    });
+    save(); render(); return toast(`장보기에 ${c.items.length}개를 담았어요`);
+  }
+  if (act === "share") { const c = comboFrom(Number(d.ci), d.sid); if (c) copy(shareText(c.items, c.cost), "조합을 복사했어요. 메신저에 붙여 넣으세요"); return; }
+  if (act === "cart-share") return copy("CU 장보기\n" + S.cart.map((x) => `${x.done ? "✓" : "□"} ${x.name}${x.qty > 1 ? " ×" + x.qty : ""} ${won(x.price * x.qty)}원`).join("\n") + `\n합계 ${won(S.cart.reduce((a, x) => a + x.price * x.qty, 0))}원`, "장보기 목록을 복사했어요");
+  if (act === "cart-clear") { S.cart = []; save(); return render(); }
+  if (act === "use-target") { const pl = plan(); if (!pl.ok) return; Object.assign(S, { R: pl.R, b: pl.b, welcomed: true }); save(); go("find"); return compute(); }
+  if (act === "more") return loadMore();
+  if (act === "clear-kmax") { S.b = null; render(); return compute(); }
+  if (act === "clear-lim") { S.L = {}; refreshSheet(); return compute(); }
+  if (act === "clear-excluded") { S.excluded = []; refreshSheet(); return compute(); }
+  if (act === "set-cap") { S.cap = Number(d.v); render(); return compute(); }
+  if (act === "widen") { S.types = ALL_TYPES.slice(); S.Q = {}; S.L = {}; S.b = null; S.cap = Math.max(S.cap, 15000); render(); return compute(); }
+  if (act === "reset") { const keep = { welcomed: true }; S = Object.assign(JSON.parse(JSON.stringify(DEF)), keep); save(); render(); compute(); return toast("설정을 지웠어요"); }
+});
+function findSnap(id) { for (const s of S.saved) { const it = s.items.find((x) => x.id === id); if (it) return it; } return null; }
+function CTX_cand() {
+  const ex = new Set(S.excluded), pin = new Set(S.pinned);
+  return Algo.usable(ITEMS.filter((it) => S.types.includes(it.type) && !ex.has(it.id) && !pin.has(it.id)), kmax(), CTX.L).filter((it) => it.price <= S.cap);
+}
+function refreshPin() { const r = $("sheet-root"); if (r.dataset.kind === "pin" && r.innerHTML) { const q = $("pin-q") ? $("pin-q").value : ""; openSheet("pin"); $("pin-q").value = q; pinSearch(q); } else refreshSheet(); }
+function syncPresets() { const L = presetList(); document.querySelectorAll("[data-preset]").forEach((b) => { const p = L.find((x) => x.id === b.dataset.preset); b.setAttribute("aria-pressed", String(!!p && p.R === S.R && p.b === S.b)); }); }
+
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.id === "in-R") {
+    const v = el.value.trim() === "" ? NaN : Number(el.value);
+    S.R = Number.isFinite(v) ? Math.round(v) : NaN; syncPresets(); return schedule();
+  }
+  if (el.id === "in-b") { // 비우면 상관없음
+    const v = el.value.trim();
+    S.b = v === "" ? null : Number.isFinite(Number(v)) ? Math.round(Number(v)) : NaN; syncPresets(); return schedule();
+  }
+  if (el.id === "in-cap") { S.cap = Number(el.value); $("cap-val").textContent = won(S.cap) + "원"; return schedule(); }
+  if (el.dataset.lim) { const v = el.value.trim(); S.L[el.dataset.lim] = v === "" || Number(v) < 0 ? null : Number(v); return schedule(); }
+  if (el.id === "pin-q") return pinSearch(el.value);
+  // 입력칸은 다시 그리지 않고 계산 결과만 바꿔서, 입력 중인 숫자가 지워지지 않게 한다
+  if (el.dataset.pfnum) { const v = el.value.trim(); S.profile[el.dataset.pfnum] = v === "" ? null : Number(v); save(); const o = $("pf-out"); if (o) o.innerHTML = planOut(); }
+});
+document.addEventListener("change", (e) => {
+  const el = e.target;
+  if (el.dataset.type) { const t = el.dataset.type; S.types = el.checked ? [...new Set(S.types.concat(t))] : S.types.filter((x) => x !== t); refreshSheet(); return compute(); }
+  if (el.dataset.grp != null) { const g = GROUPS[el.dataset.grp]; S.types = el.checked ? [...new Set(S.types.concat(g.types))] : S.types.filter((x) => !g.types.includes(x)); refreshSheet(); return compute(); }
+  if (el.dataset.cart) { const x = S.cart.find((c) => c.id === el.dataset.cart); if (x) x.done = el.checked; save(); return render(); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+// IntersectionObserver가 없거나 안 불릴 때를 위한 스크롤 확인
+window.addEventListener("scroll", () => { const s = $("more-sentinel"); if (s && s.getBoundingClientRect().top < innerHeight + 200) loadMore(); }, { passive: true });
+document.addEventListener("focusin", (e) => { if (e.target.id === "pin-q" && !$("pin-results").innerHTML) pinSearch(""); });
+
+// ================= 시작 =================
+const DATA = window.__ITEMS__ ? Promise.resolve(window.__ITEMS__) : fetch("items.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+DATA.then((d) => {
+  META = d.meta;
+  ITEMS = d.items.map((x) => ({ id: x[0], name: x[1], price: x[2], p: x[3], k: x[4], pr: x[5], kr: x[6], type: x[7], event: x[8],
+    carb: x[9], fat: x[10], sugar: x[11], na: x[12], grade: x[13], cat: x[14],
+    g: x[15], promo: x[16], u: x[17] || 1 })); // g: 같은 상품의 행끼리 같은 값, promo: 행사 상품을 적게 사는 행이면 "1+1"/"2+1", u: 받는 개수
+  BY_ID = new Map(ITEMS.map((it) => [it.id, it]));
+  // 데이터가 바뀌어 없어진 상품은 정리
+  S.pinned = S.pinned.filter((id) => BY_ID.has(id)); S.excluded = S.excluded.filter((id) => BY_ID.has(id));
+  S.types = S.types.filter((t) => ALL_TYPES.includes(t));
+  $("datatag").textContent = `CU ${META.collected} 가격 · 상품 ${won(productCount())}개`;
+  render(); compute();
+}).catch((e) => {
+  $("view").innerHTML = `<div class="card empty"><h3>상품 데이터를 불러오지 못했어요</h3><p class="muted">${esc(e.message)} · 페이지를 새로 고쳐 주세요.</p></div>`;
+});
+</script>
